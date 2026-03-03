@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.0.2] — 2026-03-03
+
+### Changed
+- README: Added 3 new Known Limitations: flat FSM expressiveness, computational model/Turing-completeness, error handling model
+- README: Roadmap v1.1 now includes `--strict` mode, `on_error` handler, recursion depth limit
+- README: Roadmap v2.0 now includes hierarchical states, parallel regions, history states, `on_exit`
+- Academic paper: Expanded Section 8.2 with flat FSM analysis, computational model, permissive error model
+- Academic paper: Updated conclusion/future work with new topics
+- Author identity corrected: Yücel Sabah (Fovane), yucelsabah00@outlook.com, sabahgamestudios.com
+- LICENSE: Updated copyright holder to Yücel Sabah
+- CONTRIBUTING: Added security contact email
+
+---
+
 ## [1.0.1] — 2026-03-03
 
 ### Changed

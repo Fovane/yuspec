@@ -1,7 +1,7 @@
 # Entity-Behavior Programming: A Behavioral Specification Paradigm for Modeling Event-Driven Systems
 
-**Yucel**  
-Independent Researcher  
+**Yücel Sabah**  
+Independent Researcher — [sabahgamestudios.com](https://sabahgamestudios.com)  
 March 2026
 
 ---
@@ -552,9 +552,43 @@ inference and custom types are planned for v1.1.
 **No import system.** All definitions must exist in a single file. Multi-file
 programs are not supported in v1.0.
 
-**Flat FSMs.** Behaviors do not support hierarchical state nesting (statecharts).
-This is a deliberate simplification for v1.0; hierarchical states are under
-evaluation for a future version.
+**Flat FSMs — no Statecharts features.** Behaviors are flat (non-hierarchical)
+Moore-Mealy hybrid machines. Features available in Harel Statecharts [12] and
+XState [14] that are absent in YUSPEC v1.0:
+
+- **Hierarchical (nested) states** — cannot express `Combat.Melee` vs `Combat.Ranged`
+  as sub-states of a parent `Combat` state
+- **Parallel (orthogonal) regions** — an entity cannot simultaneously be in `Moving`
+  AND `Attacking` within a single behavior. The workaround is attaching multiple
+  behaviors (`has MovementBehavior` + `has CombatBehavior`), but these share no
+  state and communicate only via EventBus.
+- **History states** (shallow/deep) — no mechanism to "return to previous state"
+  after an interrupt
+- **Exit actions** — only `on_enter` is supported; there is no `on_exit` for
+  cleanup when leaving a state
+
+Hierarchical states and parallel regions are under evaluation for v2.0. The design
+question is whether the added complexity is justified for YUSPEC's target use cases.
+
+**Computational model.** YUSPEC v1.0 has `while` loops (with a hard guard of
+100,000 iterations) and `foreach` iteration, making it theoretically capable of
+general computation. However, without user-defined functions (no recursion) and
+with bounded loop limits, YUSPEC is **bounded Turing-complete** in practice. All
+programs are guaranteed to terminate — the tick limit (`--ticks`, default 10,000)
+and the while-guard ensure bounded execution time. This is a deliberate design
+choice: there is no halting problem in YUSPEC, making it safe for automated
+testing pipelines and CI/CD integration. When `define function` is added in v1.1,
+a recursion depth limit will preserve the termination guarantee.
+
+**Permissive error model.** YUSPEC v1.0 uses null-propagation for error handling.
+Accessing a non-existent property returns `null`; out-of-bounds list access returns
+`null`; type mismatches in arithmetic return `null` or zero; unknown function calls
+return `null`. There is no `try/catch`, no exceptions visible to YUSPEC code, and
+no explicit error type. The design rationale is resilience: in a 1000-entity
+simulation, one entity with a missing property should not crash the entire run.
+The cost is silent failures — a misspelled `self.heatlh` instead of `self.health`
+returns `null` without any diagnostic. Planned mitigations include a `--strict`
+runtime mode and optional `required` property annotations (v1.1).
 
 ### 8.3 Comparison with Existing Work
 
@@ -629,7 +663,8 @@ behaviors communicating through typed events — captures a recurring pattern in
 software engineering that deserves first-class language support. YUSPEC v1.0 is a
 first, working realization of this idea.
 
-Future work will address function definitions, enum types, full type inference,
+Future work will address function definitions (with recursion depth limits),
+enum types, full type inference, a `--strict` error mode, hierarchical states,
 bytecode compilation, event bus routing/filtering, an import system,
 Language Server Protocol support, and external system integration through a
 plugin API.

@@ -87,7 +87,7 @@ example/<domain-name>         # new .yus example
 ## Reporting Security Issues
 
 Please **do not** file a public issue for security vulnerabilities.  
-Email: [maintainer email — add yours here]
+Email: yucelsabah00@outlook.com
 
 ---
 

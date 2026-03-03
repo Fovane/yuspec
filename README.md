@@ -433,14 +433,94 @@ Full type inference and custom types are planned for v1.1.
 All definitions must live in a single `.yus` file. No `import`, no namespaces,
 no behavior libraries. This is the **#2 priority** for v1.1.
 
+### Flat FSMs — no Statecharts features
+
+YUSPEC v1.0 behaviors are **flat** finite-state machines (Moore-Mealy hybrid).
+Features available in Harel Statecharts / XState that are **not supported**:
+
+| Statecharts Feature | Status in YUSPEC v1.0 | Impact |
+|--------------------|-----------------------|--------|
+| Hierarchical (nested) states | Not supported | Cannot model `Combat.Melee` vs `Combat.Ranged` as sub-states |
+| Parallel (orthogonal) regions | Not supported | An entity cannot be in `Moving` AND `Attacking` simultaneously within one behavior |
+| History states (shallow/deep) | Not supported | Cannot "return to previous state" after an interrupt |
+| Guards on transitions | Partial — via `rule when` | Rules evaluate each tick, not on transition edges |
+| Entry/exit actions | `on_enter` only | No `on_exit` actions when leaving a state |
+
+**Workaround:** Multiple behaviors on one entity simulate parallel regions (e.g., `has MovementBehavior` + `has CombatBehavior`), but they share no state and communicate only via EventBus.
+
+**Planned:** Hierarchical states and parallel regions are under evaluation for v2.0. The design question is whether added complexity justifies the expressiveness gain for YUSPEC's target use cases.
+
+### Computational model & Turing-completeness
+
+YUSPEC v1.0 **has** `while` loops and `foreach` iteration, making it theoretically
+capable of general computation. However:
+
+- `while` loops have a **hard guard of 100,000 iterations** — the interpreter forcibly
+  breaks after this limit to prevent infinite loops
+- There are **no user-defined functions** (no recursion possible)
+- The primary execution model is **event-reactive**: tick loop → evaluate rules →
+  dispatch events → repeat
+
+This makes YUSPEC **bounded Turing-complete** in practice:
+
+| Property | Status |
+|----------|--------|
+| `while` loops | Yes, with 100K iteration guard |
+| `foreach` iteration | Yes, over lists/maps |
+| Recursion | No (no `define function` in v1.0) |
+| Unbounded computation | No (tick limit + while guard) |
+| Termination guarantee | **Yes** — all programs terminate |
+
+> **This is a deliberate strength, not a weakness.** YUSPEC programs are guaranteed
+> to terminate. There is no halting problem. Every scenario, every simulation, every
+> test will finish. This makes YUSPEC safe for automated testing pipelines and CI/CD
+> integration. The 100K while-guard and configurable `--ticks` limit ensure bounded
+> execution time.
+
+When `define function` is added in v1.1, recursion will become possible. At that
+point, a recursion depth limit will be added to preserve the termination guarantee.
+
+### Error handling model
+
+YUSPEC v1.0 uses a **permissive/null-propagation** error model. There is no
+`try/catch`, no exceptions visible to YUSPEC code, and no explicit error type.
+
+| Situation | Runtime behavior |
+|-----------|------------------|
+| Access non-existent property (`self.foo` where `foo` not defined) | Returns `null` — no crash |
+| Out-of-bounds list access (`players[99]` on empty list) | Returns `null` — no crash |
+| Type mismatch in arithmetic (`"hello" - 5`) | Returns `null` or `0` — silent |
+| `entities_of("NonExistent")` | Returns empty list `[]` |
+| `entities_of("Player")[0]` on empty list | Returns `null` — no crash |
+| Division by zero | Returns `null` (float: `inf`/`nan`) |
+| Unknown function call | Returns `null` |
+| Event handler throws internally | C++ `std::runtime_error` — **crashes the interpreter** |
+
+**Design rationale:** The permissive model was chosen because behavioral simulations
+should be resilient to missing data. In a 1000-entity simulation, one monster with
+a missing property should not crash the entire run. `null` propagation ensures
+graceful degradation.
+
+**The cost:** Silent failures. If you misspell `self.heatlh` instead of `self.health`,
+you get `null` instead of a compile error. The semantic analyzer catches some of these
+(undeclared properties in `define entity`), but runtime property access is unchecked.
+
+**Planned improvements (v1.1):**
+- `--strict` mode: runtime null-access raises a diagnostic instead of silently returning null
+- Optional property types: `property hp float required` — omitting it in `spawn` is a compile error
+- Runtime type mismatch warnings in `--verbose` mode
+- `on_error` handler in behaviors for controlled error recovery
+
 ---
 
 ## Roadmap
 
-### v1.1 — Language (priority: type system + modularity)
+### v1.1 — Language (priority: type system + modularity + error handling)
 - `define enum` — enumerated types: `define enum DamageType { Physical, Magical, True }`
-- `define function` — named functions: `define function clamp(x, lo, hi) -> float { ... }`
+- `define function` — named functions with recursion depth limit
 - Import system: `import "path/file.yus"`
+- `--strict` mode: null-access becomes a diagnostic, type mismatches warn at runtime
+- `on_error` handler in behaviors for controlled error recovery
 - String interpolation: `"Player {self.name} has {self.hp} HP"`
 - Entity reference types: `property target: Entity<Monster>`
 - Full type inference — remove need for `any` escape hatch
@@ -452,6 +532,7 @@ no behavior libraries. This is the **#2 priority** for v1.1.
 - Event tracing: `--trace` flag dumps full event flow graph
 - Parallel zones with message passing
 - Persistent state: serialize/deserialize World snapshots
+- Recursion depth limit enforcement for `define function`
 
 ### v1.3 — Tooling
 - Language Server Protocol (LSP)
@@ -459,7 +540,11 @@ no behavior libraries. This is the **#2 priority** for v1.1.
 - Visual FSM editor + event flow visualization
 - Profiler: per-behavior tick timing, event throughput metrics
 
-### v2.0 — External Integration
+### v2.0 — Expressiveness + External Integration
+- **Hierarchical states** (Statecharts-style nested states) — under evaluation
+- **Parallel regions** (orthogonal state machines within one behavior)
+- **History states** (shallow/deep return-to-previous)
+- `on_exit` actions for state cleanup
 - Network-transparent EventBus (bridge to real systems via adapters)
 - Plugin API: custom event sources (real sensors, network sockets, databases)
 - Cluster mode: entities auto-sharded across nodes
@@ -546,4 +631,4 @@ Discussion → [GitHub Discussions](https://github.com/Fovane/yuspec/discussions
 
 ## License
 
-[MIT](LICENSE) — Copyright (c) 2026 Yucel
+[MIT](LICENSE) — Copyright (c) 2026 Yücel Sabah ([sabahgamestudios.com](https://sabahgamestudios.com))
