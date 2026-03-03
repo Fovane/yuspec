@@ -1,0 +1,184 @@
+// YUSPEC v1.0 — Trafik Simülasyonu
+// Araçlar, trafik ışıkları, kavşak yönetimi
+
+// ─── Events ───────────────────────────────────────────────────────────────
+define event LightChanged   { property light_id int; property phase string; }
+define event VehicleArrived { property vehicle_id int; property lane string; }
+define event VehiclePassed  { property vehicle_id int; }
+define event CongestionAlert { property intersection string; property queue_len int; }
+define event EmergencyVehicle { property lane string; }
+
+// ─── Entities ─────────────────────────────────────────────────────────────
+define entity TrafficLight {
+  property light_id      int     default 0
+  property intersection  string  default "A1"
+  property red_duration  int     default 3    // in sim-ticks
+  property green_duration int    default 4
+  property yellow_duration int   default 1
+  property tick_count    int     default 0
+  has TrafficLightFSM
+}
+
+define entity Vehicle {
+  property vehicle_id    int     default 0
+  property lane          string  default "north"
+  property speed         float   default 50.0
+  property waiting       bool    default false
+  property wait_ticks    int     default 0
+  has VehicleBehavior
+}
+
+define entity Intersection {
+  property name          string  default "A1"
+  property ns_queue      int     default 0
+  property ew_queue      int     default 0
+  property ns_light      string  default "red"
+  property ew_light      string  default "green"
+  has IntersectionManager
+}
+
+// ─── Traffic Light FSM ───────────────────────────────────────────────────
+define behavior TrafficLightFSM {
+  state Red    initial  timeout 3s;
+  state Green           timeout 4s;
+  state Yellow          timeout 1s;
+
+  on timeout from Red -> Green {
+    set self.tick_count = self.tick_count + 1
+    emit LightChanged { light_id: self.light_id, phase: "green" }
+    log "Light " + str(self.light_id) + " -> GREEN"
+  }
+
+  on timeout from Green -> Yellow {
+    emit LightChanged { light_id: self.light_id, phase: "yellow" }
+    log "Light " + str(self.light_id) + " -> YELLOW"
+  }
+
+  on timeout from Yellow -> Red {
+    emit LightChanged { light_id: self.light_id, phase: "red" }
+    log "Light " + str(self.light_id) + " -> RED"
+  }
+
+  // Emergency vehicle override
+  on event EmergencyVehicle from Green -> Green {
+    log "Emergency vehicle — holding green on light " + str(self.light_id)
+  }
+
+  on event EmergencyVehicle from Red -> Green {
+    emit LightChanged { light_id: self.light_id, phase: "green" }
+    log "EMERGENCY OVERRIDE: Light " + str(self.light_id) + " forced GREEN"
+  }
+}
+
+// ─── Vehicle Behavior ─────────────────────────────────────────────────────
+define behavior VehicleBehavior {
+  state Driving  initial;
+  state Waiting;
+  state Crossing timeout 2s;
+  state Done     terminal;
+
+  on event VehicleArrived from Driving -> Waiting {
+    if (event.vehicle_id == self.vehicle_id) {
+      set self.waiting = true
+      log "Vehicle " + str(self.vehicle_id) + " waiting at light on lane " + self.lane
+    }
+  }
+
+  on event LightChanged from Waiting -> Crossing {
+    if (event.phase == "green") {
+      set self.waiting = false
+      emit VehiclePassed { vehicle_id: self.vehicle_id }
+      log "Vehicle " + str(self.vehicle_id) + " crossing"
+    }
+  }
+
+  rule TooLong when self.waiting == true && self.wait_ticks > 10 then {
+    log "Vehicle " + str(self.vehicle_id) + " has been waiting too long!"
+  }
+
+  on timeout from Crossing -> Done {
+    log "Vehicle " + str(self.vehicle_id) + " cleared intersection"
+  }
+}
+
+// ─── Intersection Manager ─────────────────────────────────────────────────
+define behavior IntersectionManager {
+  state Normal  initial;
+  state Congested;
+
+  on event VehicleArrived from Normal -> Normal {
+    if (event.lane == "north" || event.lane == "south") {
+      set self.ns_queue = self.ns_queue + 1
+    } else {
+      set self.ew_queue = self.ew_queue + 1
+    }
+    if (self.ns_queue + self.ew_queue > 5) {
+      emit CongestionAlert { intersection: self.name, queue_len: self.ns_queue + self.ew_queue }
+      transition Congested
+    }
+  }
+
+  on event VehiclePassed from Normal -> Normal {
+    if (self.ns_queue > 0) {
+      set self.ns_queue = self.ns_queue - 1
+    }
+  }
+
+  on event VehiclePassed from Congested -> Congested {
+    if (self.ns_queue > 0) {
+      set self.ns_queue = self.ns_queue - 1
+    }
+    if (self.ns_queue + self.ew_queue <= 2) {
+      transition Normal
+    }
+  }
+
+  rule CongestionLog when self.ns_queue + self.ew_queue > 3 then {
+    log "Intersection " + self.name + " congested — NS queue: " + str(self.ns_queue) + ", EW queue: " + str(self.ew_queue)
+  }
+}
+
+// ─── Zone: city grid ─────────────────────────────────────────────────────
+define zone CityGrid {
+  spawn TrafficLight  count 4 with intersection = "main-square"
+  spawn Intersection  count 1 with name = "main-square"
+  spawn Vehicle       count 5 with lane = "north"
+  spawn Vehicle       count 5 with lane = "east"
+}
+
+// ─── Scenarios ────────────────────────────────────────────────────────────
+define scenario SimpleFlowTest {
+  spawn TrafficLight count 1  with light_id = 1
+  spawn Vehicle      count 3  with lane = "north"
+  spawn Intersection count 1  with name = "test"
+
+  emit VehicleArrived { vehicle_id: 0, lane: "north" }
+  emit VehicleArrived { vehicle_id: 1, lane: "north" }
+  wait 100ms
+  emit LightChanged   { light_id: 1, phase: "green" }
+  wait 100ms
+  log "Simple flow test complete"
+}
+
+define scenario EmergencyOverrideTest {
+  spawn TrafficLight count 1  with light_id = 2
+  spawn Vehicle      count 1  with vehicle_id = 99, lane = "east"
+  spawn Intersection count 1  with name = "hospital-junction"
+
+  emit VehicleArrived   { vehicle_id: 99, lane: "east" }
+  emit EmergencyVehicle { lane: "east" }
+  wait 100ms
+  log "Emergency override test complete"
+}
+
+define scenario CongestionTest {
+  spawn TrafficLight count 1  with light_id = 3, red_duration = 10
+  spawn Vehicle      count 8  with lane = "south"
+  spawn Intersection count 1  with name = "busy"
+
+  foreach v in entities_of("Vehicle") {
+    emit VehicleArrived { vehicle_id: v.vehicle_id, lane: "south" }
+  }
+  wait 200ms
+  log "Congestion detection test complete"
+}

@@ -1,0 +1,190 @@
+// YUSPEC v1.0 — Test Senaryosu Dili
+// YUSPEC'i bir test framework olarak kullanma örneği
+// Pure scenario-based testing: assert, expect, log
+
+// ─── Events (test-specific) ───────────────────────────────────────────────
+define event UserCreated    { property user_id int; property name string; property role string; }
+define event UserDeleted    { property user_id int; }
+define event PermissionChecked { property user_id int; property resource string; property allowed bool; }
+define event DataSaved      { property record_id int; property ok bool; }
+define event DataLoaded     { property record_id int; property found bool; }
+
+// ─── Entities ─────────────────────────────────────────────────────────────
+define entity User {
+  property user_id   int     default 0
+  property name      string  default ""
+  property role      string  default "viewer"
+  property active    bool    default true
+  has UserLifecycleBehavior
+}
+
+define entity DataStore {
+  property record_count int   default 0
+  property healthy      bool  default true
+}
+
+// ─── Behaviors ────────────────────────────────────────────────────────────
+define behavior UserLifecycleBehavior {
+  state Active   initial;
+  state Deleted  terminal;
+
+  on event UserDeleted from Active -> Deleted {
+    if (event.user_id == self.user_id) {
+      set self.active = false
+      log "User " + str(self.user_id) + " deleted"
+    }
+  }
+}
+
+// ─── Scenarios: YUSPEC as a Testing Language ─────────────────────────────
+
+// Test 1 — basic assertion
+define scenario BasicAssertions {
+  log "=== BasicAssertions ==="
+
+  assert (1 + 1 == 2)                   "arithmetic works"
+  assert ("hello" + " world" == "hello world")  "string concat works"
+  assert (true && !false)               "boolean logic works"
+  assert (10 > 5 && 5 < 10)            "comparisons work"
+
+  log "All basic assertions passed"
+}
+
+// Test 2 — entity creation and property access
+define scenario EntityPropertyTests {
+  log "=== EntityPropertyTests ==="
+
+  spawn User count 1 with user_id = 42, name = "Alice", role = "admin"
+
+  let users = entities_of("User")
+  assert (len(users) == 1)    "exactly one user spawned"
+
+  let alice = users[0]
+  assert (alice.user_id == 42)       "user_id correct"
+  assert (alice.name     == "Alice") "name correct"
+  assert (alice.role     == "admin") "role correct"
+  assert (alice.active   == true)    "user is active by default"
+
+  log "Entity property tests passed"
+}
+
+// Test 3 — event emission and history
+define scenario EventHistoryTests {
+  log "=== EventHistoryTests ==="
+
+  spawn User count 1 with user_id = 1, name = "Bob"
+
+  emit UserCreated { user_id: 1, name: "Bob", role: "viewer" }
+  wait 10ms
+
+  emit PermissionChecked { user_id: 1, resource: "/api/data", allowed: true }
+  wait 10ms
+
+  expect UserCreated          "UserCreated should have been emitted"
+  expect PermissionChecked    "PermissionChecked should have been emitted"
+
+  log "Event history tests passed"
+}
+
+// Test 4 — state machine transitions
+define scenario StateMachineTests {
+  log "=== StateMachineTests ==="
+
+  spawn User count 1 with user_id = 5, name = "Charlie"
+  wait 10ms
+
+  let users = entities_of("User")
+  let u = users[0]
+  assert (u.active == true)  "user starts active"
+
+  emit UserDeleted { user_id: 5 }
+  wait 50ms
+
+  let updated_users = entities_of("User")
+  let uu = updated_users[0]
+  assert (uu.active == false) "user is inactive after deletion event"
+
+  log "State machine transition tests passed"
+}
+
+// Test 5 — list and map operations
+define scenario CollectionTests {
+  log "=== CollectionTests ==="
+
+  let nums  = [1, 2, 3, 4, 5]
+  assert (len(nums) == 5)       "list length correct"
+  assert (nums[0] == 1)         "first element correct"
+  assert (nums[4] == 5)         "last element correct"
+
+  let bigger = push(nums, 6)
+  assert (len(bigger) == 6)     "push works"
+
+  assert (contains(nums, 3))    "contains existing"
+  assert (!contains(nums, 9))   "contains non-existing is false"
+
+  let lookup = { "key": "value", "count": 42 }
+  assert (lookup["key"]   == "value")  "map string lookup"
+  assert (lookup["count"] == 42)       "map int lookup"
+
+  log "Collection tests passed"
+}
+
+// Test 6 — numeric operations
+define scenario MathTests {
+  log "=== MathTests ==="
+
+  assert (abs(-5)     == 5)      "abs negative"
+  assert (abs(3)      == 3)      "abs positive"
+  assert (min(2, 7)   == 2)      "min"
+  assert (max(2, 7)   == 7)      "max"
+  assert (clamp(15, 0, 10) == 10) "clamp upper"
+  assert (clamp(-3, 0, 10) == 0)  "clamp lower"
+  assert (clamp(5 , 0, 10) == 5)  "clamp in range"
+  assert (floor(3.9) == 3)        "floor"
+  assert (ceil(3.1)  == 4)        "ceil"
+
+  log "Math tests passed"
+}
+
+// Test 7 — multi-entity simulation
+define scenario MultiEntityTest {
+  log "=== MultiEntityTest ==="
+
+  spawn User count 5 with role = "viewer"
+  spawn User count 2 with role = "admin"
+
+  let all_users = entities_of("User")
+  assert (len(all_users) == 7) "7 users spawned total"
+
+  log "Multi-entity test passed"
+}
+
+// Test 8 — conditional and loop logic
+define scenario ControlFlowTests {
+  log "=== ControlFlowTests ==="
+
+  let x = 10
+  let result = 0
+
+  if (x > 5) {
+    set result = 1
+  } else {
+    set result = -1
+  }
+  assert (result == 1) "if branch taken correctly"
+
+  let counter = 0
+  while (counter < 3) {
+    set counter = counter + 1
+  }
+  assert (counter == 3) "while loop runs 3 times"
+
+  let items = [10, 20, 30]
+  let total  = 0
+  foreach item in items {
+    set total = total + item
+  }
+  assert (total == 60) "foreach sum correct"
+
+  log "Control flow tests passed"
+}

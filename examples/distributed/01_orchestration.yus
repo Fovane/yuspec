@@ -1,0 +1,167 @@
+// YUSPEC v1.0 — Distributed System Orchestration
+// Servisler, health check, rollout yönetimi
+
+// ─── Events ───────────────────────────────────────────────────────────────
+define event HealthCheckPassed  { property service string; property latency_ms float; }
+define event HealthCheckFailed  { property service string; property error string; }
+define event ServiceStarted     { property service string; property instance_id int; }
+define event ServiceStopped     { property service string; }
+define event RolloutStarted     { property version string; property target_pct int; }
+define event RolloutCompleted   { property version string; }
+define event RolloutRolledBack  { property version string; property reason string; }
+define event TrafficShifted     { property to_version string; property pct int; }
+define event AlertTriggered     { property name string; property severity string; property message string; }
+
+// ─── Entities ─────────────────────────────────────────────────────────────
+define entity ServiceInstance {
+  property name          string  default "unnamed"
+  property version       string  default "v1.0.0"
+  property host          string  default "127.0.0.1"
+  property port          int     default 8080
+  property healthy       bool    default true
+  property consecutive_failures int default 0
+  property max_failures  int     default 3
+  property traffic_weight float  default 1.0
+  has HealthCheckBehavior
+}
+
+define entity ServiceOrchestrator {
+  property target_service string  default ""
+  property rollout_version string default ""
+  property rollout_pct     int    default 0
+  property error_budget    float  default 99.9   // SLO %
+  has RolloutControlBehavior
+}
+
+define entity LoadBalancer {
+  property algorithm     string  default "round_robin"
+  property active_version string default "v1.0.0"
+  property canary_pct    int     default 0
+}
+
+// ─── Health Check Behavior ────────────────────────────────────────────────
+define behavior HealthCheckBehavior for ServiceInstance {
+  state Running initial;
+  state Degraded;
+  state Unhealthy;
+  state Recovering  timeout 30s  retry 3;
+  state Terminated terminal;
+
+  on event HealthCheckPassed from Running -> Running {
+    set self.consecutive_failures = 0
+    // Reset degraded state
+    if (self.healthy == false) {
+      set self.healthy = true
+      log self.name + " recovered"
+    }
+  }
+
+  on event HealthCheckFailed from Running -> Degraded {
+    set self.consecutive_failures = self.consecutive_failures + 1
+    log self.name + " health check failed: " + event.error
+  }
+
+  on event HealthCheckFailed from Degraded -> Degraded {
+    set self.consecutive_failures = self.consecutive_failures + 1
+    if (self.consecutive_failures >= self.max_failures) {
+      transition Unhealthy
+    }
+  }
+
+  on event HealthCheckFailed from Unhealthy -> Unhealthy {
+    set self.healthy = false
+    emit AlertTriggered {
+      name:     "ServiceUnhealthy",
+      severity: "critical",
+      message:  self.name + " is unhealthy after " + str(self.consecutive_failures) + " failures"
+    }
+  }
+
+  rule AutoRemoveFromLB when self.healthy == false && self.consecutive_failures >= 3 then {
+    set self.traffic_weight = 0.0
+    log self.name + " removed from load balancer rotation"
+    emit TrafficShifted { to_version: "v1.0.0", pct: 100 }
+  }
+
+  on event HealthCheckPassed from Unhealthy -> Recovering {
+    log self.name + " is recovering..."
+  }
+
+  on timeout from Recovering -> Running {
+    set self.healthy = true
+    set self.consecutive_failures = 0
+    set self.traffic_weight = 1.0
+    log self.name + " fully recovered"
+  }
+}
+
+// ─── Rollout Behavior (canary deployment) ─────────────────────────────────
+define behavior RolloutControlBehavior for ServiceOrchestrator {
+  state Idle initial;
+  state Canary   timeout 10m;    // 10 minute canary window
+  state Rollout;
+  state Completed terminal;
+  state RolledBack terminal;
+
+  on event RolloutStarted from Idle -> Canary {
+    set self.rollout_version = event.version
+    set self.rollout_pct     = event.target_pct
+    log "Canary deployment started: " + event.version + " at " + str(event.target_pct) + "%"
+    emit TrafficShifted { to_version: event.version, pct: event.target_pct }
+  }
+
+  on event HealthCheckFailed from Canary -> RolledBack {
+    log "Rollout ABORTED due to health check failure: " + event.error
+    emit TrafficShifted { to_version: "v1.0.0", pct: 100 }
+    emit RolloutRolledBack { version: self.rollout_version, reason: event.error }
+  }
+
+  on timeout from Canary -> Rollout {
+    log "Canary looks healthy, proceeding to full rollout"
+    emit TrafficShifted { to_version: self.rollout_version, pct: 100 }
+  }
+
+  on event TrafficShifted from Rollout -> Completed {
+    emit RolloutCompleted { version: self.rollout_version }
+    log "Rollout COMPLETE: " + self.rollout_version
+  }
+}
+
+// ─── Zone: production cluster ─────────────────────────────────────────────
+define zone ProductionCluster {
+  spawn ServiceInstance count 3 with name = "api-gateway", version = "v2.1.0"
+  spawn ServiceInstance count 2 with name = "auth-service", version = "v1.8.0"
+  spawn ServiceOrchestrator count 1 with target_service = "api-gateway"
+  spawn LoadBalancer count 1
+}
+
+// ─── Test Scenarios ────────────────────────────────────────────────────────
+define scenario HealthyDeploymentTest {
+  spawn ServiceInstance count 1 with name = "test-svc", version = "v2.0.0"
+  spawn ServiceOrchestrator count 1
+
+  // Healthy canary
+  emit RolloutStarted { version: "v2.0.0", target_pct: 10 }
+  wait 100ms
+
+  emit HealthCheckPassed { service: "test-svc", latency_ms: 45.0 }
+  emit HealthCheckPassed { service: "test-svc", latency_ms: 42.0 }
+  wait 100ms
+
+  log "Healthy deployment test complete"
+}
+
+define scenario FailedDeploymentRollback {
+  spawn ServiceInstance count 1 with name = "bad-svc", version = "v3.0.0-buggy"
+  spawn ServiceOrchestrator count 1
+
+  emit RolloutStarted { version: "v3.0.0-buggy", target_pct: 5 }
+  wait 100ms
+
+  emit HealthCheckFailed { service: "bad-svc", error: "panic: nil pointer dereference" }
+  emit HealthCheckFailed { service: "bad-svc", error: "panic: nil pointer dereference" }
+  emit HealthCheckFailed { service: "bad-svc", error: "panic: nil pointer dereference" }
+  wait 100ms
+
+  log "Rollback test complete"
+}

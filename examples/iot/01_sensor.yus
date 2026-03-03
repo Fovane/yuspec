@@ -1,0 +1,228 @@
+// YUSPEC v1.0 — IoT Sensor Network
+// Sıcaklık/nem sensörleri, alarm, arıza yönetimi
+
+// ─── Events ───────────────────────────────────────────────────────────────
+define event Reading         { property sensor_id int; property value float; property unit string; }
+define event ThresholdExceeded { property sensor_id int; property value float; property limit float; }
+define event ThresholdNormal { property sensor_id int; }
+define event SensorFault     { property sensor_id int; property reason string; }
+define event SensorReset     { property sensor_id int; }
+define event ActuatorCommand { property target_id int; property command string; property value float; }
+define event AlarmAcknowledged { property sensor_id int; property operator string; }
+
+// ─── Entities ─────────────────────────────────────────────────────────────
+define entity TemperatureSensor {
+  property sensor_id     int     default 0
+  property location      string  default "unknown"
+  property current_value float   default 20.0
+  property min_safe      float   default -10.0
+  property max_safe      float   default 85.0
+  property fault_count   int     default 0
+  property max_faults    int     default 5
+  has SensorBehavior
+}
+
+define entity HumiditySensor {
+  property sensor_id     int     default 0
+  property location      string  default "unknown"
+  property current_value float   default 50.0
+  property min_safe      float   default 20.0
+  property max_safe      float   default 90.0
+  property fault_count   int     default 0
+  property max_faults    int     default 5
+  has SensorBehavior
+}
+
+define entity HVAC_Actuator {
+  property unit_id       int     default 0
+  property zone          string  default "main"
+  property running       bool    default false
+  property set_point     float   default 22.0
+  has ActuatorBehavior
+}
+
+define entity AlertController {
+  property active_alerts int     default 0
+  has AlertBehavior
+}
+
+// ─── Sensor FSM ───────────────────────────────────────────────────────────
+define behavior SensorBehavior {
+  state Idle     initial;
+  state Sampling timeout 5s;    // Sample every 5 seconds
+  state Alarm;
+  state Fault    timeout 30s  retry 3;
+  state Offline  terminal;
+
+  on timeout from Idle -> Sampling { }
+
+  on timeout from Sampling -> Sampling {
+    // After sampling, go back to sampling loop
+    log "Sensor " + str(self.sensor_id) + " @ " + self.location + " = " + str(self.current_value)
+  }
+
+  on event Reading from Sampling -> Sampling {
+    set self.current_value = event.value
+    if (event.value > self.max_safe) {
+      emit ThresholdExceeded {
+        sensor_id: self.sensor_id,
+        value:     event.value,
+        limit:     self.max_safe
+      }
+      transition Alarm
+    }
+    if (event.value < self.min_safe) {
+      emit ThresholdExceeded {
+        sensor_id: self.sensor_id,
+        value:     event.value,
+        limit:     self.min_safe
+      }
+      transition Alarm
+    }
+  }
+
+  on event Reading from Alarm -> Alarm {
+    set self.current_value = event.value
+    if (event.value <= self.max_safe && event.value >= self.min_safe) {
+      emit ThresholdNormal { sensor_id: self.sensor_id }
+      transition Sampling
+    }
+  }
+
+  on event AlarmAcknowledged from Alarm -> Alarm {
+    log "Alarm ACK by " + event.operator + " for sensor " + str(self.sensor_id)
+  }
+
+  on event SensorFault from Sampling -> Fault {
+    set self.fault_count = self.fault_count + 1
+    log "Sensor fault: " + event.reason
+  }
+
+  on event SensorFault from Alarm -> Fault {
+    set self.fault_count = self.fault_count + 1
+  }
+
+  on timeout from Fault -> Sampling {
+    log "Sensor " + str(self.sensor_id) + " recovered after fault"
+  }
+
+  rule TooManyFaults when self.fault_count >= self.max_faults then {
+    log "Sensor " + str(self.sensor_id) + " PERMANENTLY OFFLINE"
+    transition Offline
+  }
+}
+
+// ─── Actuator FSM ─────────────────────────────────────────────────────────
+define behavior ActuatorBehavior {
+  state Off    initial;
+  state On;
+  state Error  timeout 10s;
+
+  on event ActuatorCommand from Off -> On {
+    if (event.command == "start") {
+      set self.running = true
+      set self.set_point = event.value
+      log "HVAC unit " + str(self.unit_id) + " started, set point: " + str(event.value)
+    }
+  }
+
+  on event ActuatorCommand from On -> Off {
+    if (event.command == "stop") {
+      set self.running = false
+      log "HVAC unit " + str(self.unit_id) + " stopped"
+    }
+  }
+
+  on event SensorFault from On -> Error {
+    set self.running = false
+    log "HVAC safety shutdown due to sensor fault"
+  }
+
+  on timeout from Error -> Off {
+    log "HVAC unit " + str(self.unit_id) + " reset after error"
+  }
+}
+
+// ─── Alert Behavior ───────────────────────────────────────────────────────
+define behavior AlertBehavior {
+  state Normal  initial;
+  state Warning;
+  state Critical;
+
+  on event ThresholdExceeded from Normal -> Warning {
+    set self.active_alerts = self.active_alerts + 1
+    log "WARNING: Sensor " + str(event.sensor_id) + " value " + str(event.value) + " exceeds limit " + str(event.limit)
+    emit ActuatorCommand { target_id: 1, command: "start", value: 18.0 }
+  }
+
+  on event ThresholdExceeded from Warning -> Critical {
+    set self.active_alerts = self.active_alerts + 1
+    log "CRITICAL: Multiple threshold violations!"
+  }
+
+  on event ThresholdNormal from Warning -> Normal {
+    set self.active_alerts = self.active_alerts - 1
+    log "Alert resolved"
+  }
+
+  on event ThresholdNormal from Critical -> Warning {
+    set self.active_alerts = self.active_alerts - 1
+  }
+
+  rule AllClear when self.active_alerts == 0 then {
+    transition Normal
+  }
+}
+
+// ─── Zone: server room sensors ────────────────────────────────────────────
+define zone ServerRoomMonitoring {
+  spawn TemperatureSensor count 4 with location = "rack-A", min_safe = 15.0, max_safe = 35.0
+  spawn HumiditySensor    count 2 with location = "rack-A", min_safe = 30.0, max_safe = 70.0
+  spawn HVAC_Actuator     count 1 with zone = "rack-A"
+  spawn AlertController   count 1
+}
+
+// ─── Scenarios ────────────────────────────────────────────────────────────
+define scenario NormalOperationsTest {
+  spawn TemperatureSensor count 1 with sensor_id = 1, location = "lab", min_safe = 10.0, max_safe = 40.0
+  spawn AlertController   count 1
+
+  emit Reading { sensor_id: 1, value: 22.5, unit: "celsius" }
+  wait 100ms
+  emit Reading { sensor_id: 1, value: 23.1, unit: "celsius" }
+  wait 100ms
+  emit Reading { sensor_id: 1, value: 22.8, unit: "celsius" }
+  wait 100ms
+  log "Normal operation: no alarms expected"
+}
+
+define scenario OverheatAlarmTest {
+  spawn TemperatureSensor count 1 with sensor_id = 2, location = "hotroom", min_safe = 10.0, max_safe = 30.0
+  spawn AlertController   count 1
+
+  emit Reading { sensor_id: 2, value: 25.0, unit: "celsius" }
+  wait 100ms
+
+  emit Reading { sensor_id: 2, value: 41.0, unit: "celsius" }
+  wait 100ms
+
+  emit AlarmAcknowledged { sensor_id: 2, operator: "admin" }
+  wait 100ms
+
+  emit Reading { sensor_id: 2, value: 22.0, unit: "celsius" }
+  wait 100ms
+
+  log "Overheat alarm test complete"
+}
+
+define scenario SensorFaultTest {
+  spawn TemperatureSensor count 1 with sensor_id = 3, location = "outdoor", max_faults = 2
+  spawn AlertController   count 1
+
+  emit SensorFault { sensor_id: 3, reason: "ADC read timeout" }
+  wait 100ms
+  emit SensorFault { sensor_id: 3, reason: "ADC read timeout" }
+  wait 100ms
+
+  log "Sensor fault test complete — sensor should be offline"
+}

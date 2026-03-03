@@ -1,0 +1,12 @@
+// Yuspec v0.1 - Arena Minimal
+
+create terrain 100x100;
+
+create humanoid player with health 100 and mana 100;
+attach move logic to player;
+
+create humanoid hostile count 3 with health 30;
+attach chase logic to hostile;
+attach contact_damage logic to hostile with damage 5;
+
+spawn hostile in terrain random;

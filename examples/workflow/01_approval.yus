@@ -1,0 +1,146 @@
+// YUSPEC v1.0 — Workflow / Approval Process
+// İş akışı + onay süreçleri + otomasyon
+
+// ─── Events ───────────────────────────────────────────────────────────────
+define event RequestSubmitted   { property title string; property requester string; }
+define event ReviewStarted      { property reviewer string; }
+define event ReviewApproved     { property reviewer string; property comment string default ""; }
+define event ReviewRejected     { property reviewer string; property reason  string; }
+define event DirectorApproved   {}
+define event DirectorRejected   { property reason string; }
+define event RequestCompleted   { property request_id int; }
+define event RequestCancelled   {}
+define event EscalationRequired { property reason string; }
+
+// ─── Entities ────────────────────────────────────────────────────────────
+define entity ApprovalRequest {
+  property title         string  default ""
+  property requester     string  default ""
+  property status        string  default "draft"
+  property review_count  int     default 0
+  property max_reviews   int     default 2
+  property reviewer_name string  default ""
+  property rejection_reason string default ""
+  has ApprovalWorkflowBehavior
+}
+
+define entity Employee {
+  property name  string default "Unknown"
+  property role  string default "staff"   // staff | manager | director
+  property dept  string default "general"
+}
+
+// ─── Workflow Behavior (state machine approach) ───────────────────────────
+define behavior ApprovalWorkflowBehavior for ApprovalRequest {
+  state Draft initial;
+  state UnderReview  timeout 2d  retry 1;
+  state ManagerApproval timeout 1d;
+  state DirectorReview  timeout 3d;
+  state Approved terminal;
+  state Rejected terminal;
+  state Cancelled terminal;
+  state Escalated;
+
+  // Submit request
+  on event RequestSubmitted from Draft -> UnderReview {
+    set self.title     = event.title
+    set self.requester = event.requester
+    set self.status    = "under_review"
+    log "Request submitted: " + self.title + " by " + self.requester
+  }
+
+  // Manager reviews
+  on event ReviewApproved from UnderReview -> ManagerApproval {
+    set self.review_count  = self.review_count + 1
+    set self.reviewer_name = event.reviewer
+    set self.status        = "manager_approved"
+    log "Review approved by " + event.reviewer
+  }
+
+  on event ReviewRejected from UnderReview -> Rejected {
+    set self.status           = "rejected"
+    set self.rejection_reason = event.reason
+    log "Rejected by " + event.reviewer + ": " + event.reason
+  }
+
+  // Timeout → escalate
+  on timeout from UnderReview -> Escalated {
+    emit EscalationRequired { reason: "Review timeout exceeded 2 days" }
+    log "Review escalated — no response in 2 days"
+  }
+
+  // Director final approval
+  on event DirectorApproved from ManagerApproval -> Approved {
+    set self.status = "approved"
+    emit RequestCompleted { request_id: 1 }
+    log "Request APPROVED: " + self.title
+  }
+
+  on event DirectorRejected from ManagerApproval -> Rejected {
+    set self.status           = "rejected"
+    set self.rejection_reason = event.reason
+    log "Request REJECTED by director: " + event.reason
+  }
+
+  on timeout from ManagerApproval -> Escalated {
+    emit EscalationRequired { reason: "Director approval timeout" }
+  }
+
+  // Cancel any time
+  on event RequestCancelled -> Cancelled {
+    set self.status = "cancelled"
+    log "Request cancelled: " + self.title
+  }
+
+  // Rule: auto-approve small requests
+  rule AutoApproveSmall when self.status == "under_review" && self.review_count >= 2 then {
+    log "Auto-approving after " + str(self.review_count) + " reviews"
+    emit DirectorApproved {}
+  }
+}
+
+// ─── Automation System ────────────────────────────────────────────────────
+define system ApprovalAutomation {
+  on event RequestCompleted {
+    log "SYSTEM: Completed request #" + str(event.request_id)
+    // Trigger downstream automation
+    emit ReviewStarted { reviewer: "automation-bot" }
+  }
+
+  on event EscalationRequired {
+    log "ESCALATION ALERT: " + event.reason
+    // Could send email, Slack message, etc.
+  }
+}
+
+// ─── Test Scenarios ────────────────────────────────────────────────────────
+define scenario HappyPathApproval {
+  spawn ApprovalRequest count 1 with title = "Q1 Budget Increase", requester = "alice"
+
+  // Submit
+  emit RequestSubmitted { title: "Q1 Budget Increase", requester: "alice" }
+  wait 100ms
+
+  // Manager reviews and approves
+  emit ReviewApproved { reviewer: "bob_manager", comment: "Looks good" }
+  wait 100ms
+
+  // Director approves
+  emit DirectorApproved {}
+  wait 100ms
+
+  assert entities_of("ApprovalRequest").length > 0 "Request entity still exists"
+  log "Happy path complete"
+}
+
+define scenario RejectionScenario {
+  spawn ApprovalRequest count 1 with title = "Expensive Tool Purchase"
+
+  emit RequestSubmitted { title: "Expensive Tool Purchase", requester: "charlie" }
+  wait 100ms
+
+  emit ReviewRejected { reviewer: "dave_manager", reason: "Budget constraints" }
+  wait 100ms
+
+  log "Rejection scenario complete"
+}

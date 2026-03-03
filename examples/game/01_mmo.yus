@@ -1,0 +1,481 @@
+// YUSPEC v1.0 — MMO RPG: Metin2-benzeri oyun
+// Oyuncular, canavarlar, dövüş sistemi, quest, seviye atlama
+
+// ════════════════════════════════════════════════════════════════════════
+// EVENTS
+// ════════════════════════════════════════════════════════════════════════
+define event PlayerAttack    { property attacker_id int; property target_id int; property damage float; property skill string; }
+define event MonsterAttack   { property monster_id int; property target_id int; property damage float; }
+define event EntityDied      { property entity_id int; property killer_id int; property entity_type string; }
+define event ExpGained       { property player_id int; property amount int; property source string; }
+define event LevelUp         { property player_id int; property new_level int; }
+define event SkillUsed       { property player_id int; property skill_name string; property mana_cost int; }
+define event ItemDropped     { property monster_id int; property item_type string; property x float; property y float; }
+define event ItemPickedUp    { property player_id int; property item_type string; }
+define event MonsterSpawned  { property monster_id int; property monster_type string; property x float; property y float; }
+define event PlayerMoved     { property player_id int; property x float; property y float; }
+define event QuestAccepted   { property player_id int; property quest_name string; }
+define event QuestProgress   { property player_id int; property quest_name string; property current int; property required int; }
+define event QuestCompleted  { property player_id int; property quest_name string; property reward_exp int; }
+define event ResurrectionReady { property player_id int; }
+
+// ════════════════════════════════════════════════════════════════════════
+// ENTITIES
+// ════════════════════════════════════════════════════════════════════════
+
+define entity Player {
+  property player_id    int     default 0
+  property name         string  default "Warrior"
+  property class        string  default "warrior"   // warrior, mage, archer
+  property level        int     default 1
+  property exp          int     default 0
+  property exp_to_next  int     default 100
+  property hp           float   default 500.0
+  property max_hp       float   default 500.0
+  property mp           float   default 200.0
+  property max_mp       float   default 200.0
+  property attack       float   default 50.0
+  property defense      float   default 20.0
+  property x            float   default 0.0
+  property y            float   default 0.0
+  property alive        bool    default true
+  property attack_cooldown_ms int default 0
+  has PlayerCombatBehavior
+  has PlayerProgressionBehavior
+}
+
+define entity Monster {
+  property monster_id   int     default 0
+  property monster_type string  default "wolf"
+  property level        int     default 1
+  property hp           float   default 100.0
+  property max_hp       float   default 100.0
+  property attack       float   default 15.0
+  property defense      float   default 5.0
+  property xp_reward    int     default 30
+  property aggro_range  float   default 5.0
+  property x            float   default 0.0
+  property y            float   default 0.0
+  property alive        bool    default true
+  property target_id    int     default -1
+  has MonsterAI
+}
+
+define entity NPC {
+  property npc_id       int     default 0
+  property name         string  default "NPC"
+  property role         string  default "quest_giver"  // quest_giver, merchant, blacksmith
+  property x            float   default 0.0
+  property y            float   default 0.0
+}
+
+define entity QuestTracker {
+  property player_id    int     default 0
+  property quest_name   string  default ""
+  property kill_count   int     default 0
+  property required_kills int   default 3
+  property completed    bool    default false
+  has QuestBehavior
+}
+
+define entity DropItem {
+  property item_id      int     default 0
+  property item_type    string  default "stone"
+  property x            float   default 0.0
+  property y            float   default 0.0
+  property picked_up    bool    default false
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// BEHAVIORS
+// ════════════════════════════════════════════════════════════════════════
+
+// ─── Monster AI ──────────────────────────────────────────────────────────
+define behavior MonsterAI {
+  state Idle     initial  timeout 3s;
+  state Roaming           timeout 5s;
+  state Chasing           timeout 10s;
+  state Attacking         timeout 2s;
+  state Fleeing           timeout 4s;
+  state Dead     terminal;
+
+  // Idle → roam after timeout
+  on timeout from Idle -> Roaming {
+    log "Monster " + str(self.monster_id) + " starts roaming"
+  }
+
+  // Roaming → attack: player comes near
+  on event PlayerMoved from Roaming -> Chasing {
+    let dx = event.x - self.x
+    let dy = event.y - self.y
+    let dist = sqrt(dx * dx + dy * dy)
+    if (dist <= self.aggro_range) {
+      set self.target_id = event.player_id
+      log "Monster " + str(self.monster_id) + " aggro on player " + str(event.player_id)
+    }
+  }
+
+  on timeout from Roaming -> Idle {
+    log "Monster " + str(self.monster_id) + " back to idle"
+  }
+
+  // Chasing → Attacking when close
+  on timeout from Chasing -> Attacking {
+    if (self.target_id != -1) {
+      let dmg = self.attack
+      emit MonsterAttack {
+        monster_id: self.monster_id,
+        target_id:  self.target_id,
+        damage:     dmg
+      }
+      log "Monster " + str(self.monster_id) + " attacks player " + str(self.target_id) + " for " + str(dmg) + " dmg"
+    }
+  }
+
+  on timeout from Chasing -> Idle {
+    set self.target_id = -1
+    log "Monster " + str(self.monster_id) + " lost target"
+  }
+
+  // Attacking loop
+  on timeout from Attacking -> Attacking {
+    if (self.target_id != -1 && self.hp > 0.0) {
+      emit MonsterAttack {
+        monster_id: self.monster_id,
+        target_id:  self.target_id,
+        damage:     self.attack
+      }
+    }
+  }
+
+  // Take damage — universal handler (fires from any state)
+  on event PlayerAttack {
+    if (event.target_id == self.monster_id) {
+      let net = event.damage - self.defense
+      if (net < 1.0) { set net = 1.0 }
+      set self.hp = self.hp - net
+      log "Monster " + str(self.monster_id) + " takes " + str(net) + " dmg, HP=" + str(self.hp)
+      if (self.hp <= 0.0) {
+        set self.alive = false
+        emit EntityDied { entity_id: self.monster_id, killer_id: event.attacker_id, entity_type: "Monster" }
+        emit ItemDropped {
+          monster_id: self.monster_id,
+          item_type:  "stone",
+          x:          self.x,
+          y:          self.y
+        }
+        transition Dead
+      }
+    }
+  }
+
+  on timeout from Fleeing -> Idle {
+    log "Monster " + str(self.monster_id) + " escaped"
+    set self.target_id = -1
+  }
+}
+
+// ─── Player Combat Behavior ───────────────────────────────────────────────
+define behavior PlayerCombatBehavior {
+  state Alive      initial;
+  state Attacking  timeout 1s;             // attack animation / cooldown
+  state Stunned    timeout 2s;
+  state Dead       timeout 10s  retry 1;   // resurrection timer
+  state Ghost      terminal;               // perma-death (pvp) placeholder
+
+  on event PlayerAttack from Alive -> Attacking {
+    if (event.attacker_id == self.player_id) {
+      let mp_cost = 10
+      if (event.skill != "") { set mp_cost = 30 }
+      set self.mp = self.mp - mp_cost
+      if (self.mp < 0.0) { set self.mp = 0.0 }
+      log "Player " + str(self.player_id) + " attacks monster " + str(event.target_id) + " for " + str(event.damage)
+    }
+  }
+
+  on timeout from Attacking -> Alive {
+    // cooldown done
+  }
+
+  on event MonsterAttack from Alive -> Alive {
+    if (event.target_id == self.player_id) {
+      let net = event.damage - self.defense
+      if (net < 1.0) { set net = 1.0 }
+      set self.hp = self.hp - net
+      log "Player " + str(self.player_id) + " hit by monster " + str(event.monster_id) + " for " + str(net) + " dmg, HP=" + str(self.hp)
+      if (self.hp <= 0.0) {
+        set self.alive = false
+        set self.hp    = 0.0
+        emit EntityDied { entity_id: self.player_id, killer_id: event.monster_id, entity_type: "Player" }
+        transition Dead
+      }
+    }
+  }
+
+  on event MonsterAttack from Attacking -> Alive {
+    if (event.target_id == self.player_id) {
+      let net = event.damage - self.defense
+      if (net < 1.0) { set net = 1.0 }
+      set self.hp = self.hp - net
+      if (self.hp <= 0.0) {
+        set self.alive = false
+        emit EntityDied { entity_id: self.player_id, killer_id: event.monster_id, entity_type: "Player" }
+        transition Dead
+      }
+    }
+  }
+
+  // Resurrection
+  on timeout from Dead -> Alive {
+    set self.alive = true
+    set self.hp    = self.max_hp * 0.3
+    set self.mp    = self.max_mp * 0.3
+    emit ResurrectionReady { player_id: self.player_id }
+    log "Player " + str(self.player_id) + " resurrected with 30% HP/MP"
+  }
+
+  // HP regen
+  rule HpRegen when self.alive == true && self.hp < self.max_hp then {
+    set self.hp = self.hp + 2.0
+    if (self.hp > self.max_hp) { set self.hp = self.max_hp }
+  }
+
+  // MP regen
+  rule MpRegen when self.alive == true && self.mp < self.max_mp then {
+    set self.mp = self.mp + 3.0
+    if (self.mp > self.max_mp) { set self.mp = self.max_mp }
+  }
+}
+
+// ─── Player Progression Behavior ──────────────────────────────────────────
+define behavior PlayerProgressionBehavior {
+  state Playing initial;
+
+  on event EntityDied from Playing -> Playing {
+    if (event.killer_id == self.player_id && event.entity_type == "Monster") {
+      let monsters = entities_of("Monster")
+      // Find the dead monster and collect exp reward
+      foreach m in monsters {
+        if (m.monster_id == event.entity_id) {
+          emit ExpGained { player_id: self.player_id, amount: m.xp_reward, source: m.monster_type }
+        }
+      }
+    }
+  }
+
+  on event ExpGained from Playing -> Playing {
+    if (event.player_id == self.player_id) {
+      set self.exp = self.exp + event.amount
+      log "Player " + str(self.player_id) + " gained " + str(event.amount) + " EXP (total: " + str(self.exp) + ")"
+      if (self.exp >= self.exp_to_next) {
+        set self.level       = self.level + 1
+        set self.exp         = self.exp - self.exp_to_next
+        set self.exp_to_next = self.exp_to_next + 50
+        set self.max_hp      = self.max_hp + 50.0
+        set self.hp          = self.max_hp
+        set self.attack      = self.attack + 5.0
+        set self.defense     = self.defense + 2.0
+        emit LevelUp { player_id: self.player_id, new_level: self.level }
+        log "*** LEVEL UP! Player " + str(self.player_id) + " is now level " + str(self.level) + " ***"
+      }
+    }
+  }
+
+  on event ItemPickedUp from Playing -> Playing {
+    if (event.player_id == self.player_id) {
+      log "Player " + str(self.player_id) + " picked up: " + event.item_type
+    }
+  }
+
+  on event QuestCompleted from Playing -> Playing {
+    if (event.player_id == self.player_id) {
+      emit ExpGained { player_id: self.player_id, amount: event.reward_exp, source: "quest" }
+      log "Quest reward: " + str(event.reward_exp) + " EXP for player " + str(self.player_id)
+    }
+  }
+}
+
+// ─── Quest Behavior ───────────────────────────────────────────────────────
+define behavior QuestBehavior {
+  state Inactive initial;
+  state InProgress;
+  state Completed terminal;
+
+  on event QuestAccepted from Inactive -> InProgress {
+    if (event.player_id == self.player_id) {
+      set self.quest_name = event.quest_name
+      log "Quest started: " + event.quest_name + " (kill " + str(self.required_kills) + " monsters)"
+    }
+  }
+
+  on event EntityDied from InProgress -> InProgress {
+    if (event.killer_id == self.player_id && event.entity_type == "Monster") {
+      set self.kill_count = self.kill_count + 1
+      emit QuestProgress {
+        player_id:  self.player_id,
+        quest_name: self.quest_name,
+        current:    self.kill_count,
+        required:   self.required_kills
+      }
+      log "Quest " + self.quest_name + ": " + str(self.kill_count) + "/" + str(self.required_kills)
+      if (self.kill_count >= self.required_kills) {
+        set self.completed = true
+        emit QuestCompleted {
+          player_id:  self.player_id,
+          quest_name: self.quest_name,
+          reward_exp: 200
+        }
+        log "QUEST COMPLETE: " + self.quest_name + "! Reward: 200 EXP"
+        transition Completed
+      }
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// ZONES
+// ════════════════════════════════════════════════════════════════════════
+
+define zone StartVillage {
+  // NPCs
+  spawn NPC count 1 with npc_id = 1, name = "Elder Seok", role = "quest_giver", x = 5.0, y = 5.0
+  spawn NPC count 1 with npc_id = 2, name = "Blacksmith Han", role = "blacksmith", x = 8.0, y = 2.0
+
+  // Monsters in the surrounding area
+  spawn Monster count 10 with monster_type = "wolf",    level = 1, hp = 80.0,  xp_reward = 20, x = 20.0, y = 15.0
+  spawn Monster count 5  with monster_type = "boar",    level = 2, hp = 120.0, xp_reward = 35, x = 30.0, y = 10.0
+  spawn Monster count 3  with monster_type = "bandit",  level = 3, hp = 200.0, xp_reward = 60, x = 40.0, y = 25.0
+}
+
+define zone FieldOfBattle {
+  spawn Monster count 20 with monster_type = "orc",     level = 5,  hp = 300.0, xp_reward = 90,  attack = 35.0
+  spawn Monster count 10 with monster_type = "shaman",  level = 7,  hp = 250.0, xp_reward = 120, attack = 50.0
+  spawn Monster count 5  with monster_type = "warlord", level = 10, hp = 800.0, xp_reward = 300, attack = 80.0, defense = 25.0
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// SCENARIOS
+// ════════════════════════════════════════════════════════════════════════
+
+define scenario CombatTest {
+  log "=== YUSPEC MMO — Combat Test ==="
+
+  // Setup
+  spawn Player  count 1  with player_id = 1, name = "Kahraman", class = "warrior", hp = 500.0, attack = 60.0, defense = 25.0
+  spawn Monster count 1  with monster_id = 100, monster_type = "wolf", hp = 80.0, attack = 15.0, xp_reward = 20
+
+  wait 100ms
+
+  // Player attacks monster 3 times
+  emit PlayerAttack { attacker_id: 1, target_id: 100, damage: 55.0, skill: "" }
+  wait 100ms
+  emit PlayerAttack { attacker_id: 1, target_id: 100, damage: 55.0, skill: "" }
+  wait 100ms
+  emit PlayerAttack { attacker_id: 1, target_id: 100, damage: 55.0, skill: "" }
+  wait 100ms
+
+  expect EntityDied    "Monster should have died"
+  expect ExpGained     "Player should have received exp"
+
+  log "=== Combat Test Complete ==="
+}
+
+define scenario KillQuestTest {
+  log "=== YUSPEC MMO — Kill Quest Test ==="
+
+  spawn Player       count 1 with player_id = 2, name = "Usta", attack = 80.0, defense = 20.0
+  spawn Monster      count 3 with monster_type = "wolf", hp = 60.0, xp_reward = 20
+  spawn QuestTracker count 1 with player_id = 2, quest_name = "WolfHunter", required_kills = 3
+
+  emit QuestAccepted { player_id: 2, quest_name: "WolfHunter" }
+  wait 50ms
+
+  let wolves = entities_of("Monster")
+  foreach w in wolves {
+    // Kill each wolf
+    emit PlayerAttack { attacker_id: 2, target_id: w.monster_id, damage: 70.0, skill: "" }
+    wait 50ms
+  }
+
+  expect QuestCompleted   "Quest should be completed after killing 3 wolves"
+  expect LevelUp          "Player may level up from quest rewards"
+
+  log "=== Kill Quest Test Complete ==="
+}
+
+define scenario LevelUpTest {
+  log "=== YUSPEC MMO — Level Up Test ==="
+
+  spawn Player  count 1  with player_id = 3, name = "Tecrube", exp = 90, exp_to_next = 100, level = 1
+
+  // 15 EXP push over the threshold
+  emit ExpGained { player_id: 3, amount: 15, source: "test" }
+  wait 50ms
+
+  let players = entities_of("Player")
+  let p = players[0]
+  assert (p.level == 2)   "player should be level 2"
+  assert (p.exp == 5)     "leftover exp should be 5"
+
+  expect LevelUp "LevelUp event should fire"
+
+  log "=== Level Up Test Complete ==="
+}
+
+define scenario PlayerDeathTest {
+  log "=== YUSPEC MMO — Player Death & Resurrection Test ==="
+
+  spawn Player  count 1  with player_id = 4, name = "Ölümsüz", hp = 50.0, max_hp = 500.0, defense = 5.0
+  spawn Monster count 1  with monster_id = 200, monster_type = "bandit", attack = 60.0
+
+  // Massive attack — kills player
+  emit MonsterAttack { monster_id: 200, target_id: 4, damage: 100.0 }
+  wait 50ms
+
+  expect EntityDied "Player should die"
+
+  let players = entities_of("Player")
+  let p = players[0]
+  assert (p.alive == false)  "player should be dead"
+
+  log "Waiting for resurrection..."
+  wait 600ms  // Resurrection is at 10s scaled by tick_ms—in test give enough ticks
+
+  // After resurrection
+  let players2 = entities_of("Player")
+  let p2 = players2[0]
+  log "Post-resurrection HP: " + str(p2.hp)
+
+  log "=== Player Death Test Complete ==="
+}
+
+define scenario SkillCombatTest {
+  log "=== YUSPEC MMO — Skill-based Combat Test ==="
+
+  spawn Player  count 1  with player_id = 5, name = "Büyücü", class = "mage",
+                               hp = 300.0, max_hp = 300.0, mp = 300.0, max_mp = 300.0,
+                               attack = 100.0, defense = 10.0
+  spawn Monster count 1  with monster_id = 300, monster_type = "shaman", hp = 250.0, attack = 40.0
+
+  // Normal attack
+  emit PlayerAttack { attacker_id: 5, target_id: 300, damage: 90.0, skill: "" }
+  wait 100ms
+
+  // Skill attack (costs 30 MP)
+  emit SkillUsed { player_id: 5, skill_name: "Fireball", mana_cost: 30 }
+  emit PlayerAttack { attacker_id: 5, target_id: 300, damage: 150.0, skill: "Fireball" }
+  wait 100ms
+
+  // Monster counter-attack
+  emit MonsterAttack { monster_id: 300, target_id: 5, damage: 35.0 }
+  wait 100ms
+
+  // Finish monster
+  emit PlayerAttack { attacker_id: 5, target_id: 300, damage: 150.0, skill: "Fireball" }
+  wait 100ms
+
+  expect EntityDied  "Shaman should have died"
+  expect ExpGained   "Mage should gain exp"
+
+  log "=== Skill Combat Test Complete ==="
+}

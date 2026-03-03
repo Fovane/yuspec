@@ -1,0 +1,10 @@
+create terrain 220x140;
+
+create humanoid player with health 300 and mana 0;
+attach move logic to player;
+
+create humanoid hostile count 25 with health 30;
+attach chase logic to hostile;
+attach contact_damage logic to hostile with damage 6;
+
+spawn hostile in terrain random;

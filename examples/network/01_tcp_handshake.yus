@@ -1,0 +1,130 @@
+// YUSPEC v1.0 — Network Protocol Example
+// TCP-like handshake state machine with timeout + retry
+
+// ─── Events ───────────────────────────────────────────────────────────────
+define event SynSent {}
+define event SynAckReceived { property seq_num int default 0; }
+define event AckSent {}
+define event ConnectionEstablished {}
+define event ConnectionFailed      { property reason string default "unknown"; }
+define event DataReceived          { property payload string; property seq int; }
+define event DataAcked             { property seq int; }
+define event FinSent {}
+define event FinAckReceived {}
+
+// ─── Entities ────────────────────────────────────────────────────────────
+define entity TcpConnection {
+  property remote_addr  string  default "127.0.0.1"
+  property remote_port  int     default 80
+  property local_seq    int     default 0
+  property remote_seq   int     default 0
+  property window_size  int     default 65535
+  property retries_left int     default 3
+  has TcpHandshake
+}
+
+define entity TcpServer {
+  property listen_port  int     default 443
+  property max_conns    int     default 1000
+  property active_conns int     default 0
+}
+
+// ─── Handshake State Machine ──────────────────────────────────────────────
+define behavior TcpHandshake for TcpConnection {
+  state Idle initial;
+  state SynSent     timeout 5s  retry 3;
+  state SynAckWait  timeout 5s  retry 3;
+  state Established;
+  state Closing;
+  state Closed terminal;
+  state Failed  terminal;
+
+  // STEP 1: Start → send SYN
+  on event Connect from Idle -> SynSent {
+    log "SYN → " + self.remote_addr + ":" + str(self.remote_port)
+    emit SynSent {}
+  }
+
+  // STEP 2: SYN+ACK received → send ACK
+  on event SynAckReceived from SynSent -> Established {
+    set self.remote_seq = event.seq_num
+    log "SYN-ACK received seq=" + str(event.seq_num)
+    emit AckSent {}
+    emit ConnectionEstablished {}
+  }
+
+  // Timeout on SYN → retry or fail
+  on timeout from SynSent -> Failed {
+    if (self.retries_left > 0) {
+      set self.retries_left = self.retries_left - 1
+      log "SYN timeout, retry " + str(3 - self.retries_left) + "/3"
+      emit SynSent {}
+      transition SynSent
+    } else {
+      log "SYN timeout: max retries exceeded"
+      emit ConnectionFailed { reason: "syn_timeout" }
+    }
+  }
+
+  // STEP 3: Data exchange in Established state
+  on event DataReceived from Established -> Established {
+    log "DATA received seq=" + str(event.seq) + " payload=" + event.payload
+    emit DataAcked { seq: event.seq }
+  }
+
+  // STEP 4: Active close
+  on event CloseRequested from Established -> Closing {
+    emit FinSent {}
+    log "FIN sent, waiting FIN-ACK"
+  }
+
+  on event FinAckReceived from Closing -> Closed {
+    log "Connection closed cleanly"
+  }
+
+  on timeout from Closing -> Closed {
+    log "Close timeout, force close"
+  }
+}
+
+// ─── System: Server listener ─────────────────────────────────────────────
+define system TcpServerSystem {
+  on event ConnectionEstablished {
+    log "Server: new connection established (total active)"
+  }
+  on event ConnectionFailed {
+    log "Server: connection failed — " + event.reason
+  }
+}
+
+// ─── Test Scenario ────────────────────────────────────────────────────────
+define scenario NetworkHandshakeTest {
+  // Create a connection
+  spawn TcpConnection count 1 with remote_addr = "192.168.1.100", remote_port = 8080
+
+  // Simulate connection initiation
+  emit Connect {}
+  wait 100ms
+
+  // Simulate remote server responding with SYN-ACK
+  emit SynAckReceived { seq_num: 42 }
+  wait 50ms
+
+  // Verify connection is established
+  expect entities_of("TcpConnection").length > 0
+  log "Handshake test complete"
+}
+
+// ─── Scenario: Timeout / Retry ────────────────────────────────────────────
+define scenario HandshakeTimeoutTest {
+  spawn TcpConnection count 1 with remote_addr = "10.0.0.1", remote_port = 443, retries_left = 2
+
+  emit Connect {}
+  // Simulate 3 timeouts (no SYN-ACK comes back)
+  wait 5s
+  wait 5s
+  wait 5s
+  wait 5s
+
+  log "Timeout/retry scenario complete"
+}
