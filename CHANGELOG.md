@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.0.1] — 2026-03-03
+
+### Changed
+- README: Repositioned from "domain-agnostic" to "behavioral specification language"
+- README: Added honest "Known Limitations" section addressing all five critique areas
+- README: Reprioritized roadmap based on community feedback (enum types, EventBus routing)
+- Academic paper: Added "Threats to Validity" section (Section 9)
+- Academic paper: Expanded Known Limitations with EventBus scalability, type system gaps
+- Academic paper: Changed title to clarify modeling/specification nature
+- Academic paper: Added TLA+ reference [23] for modeling language comparison
+- GitHub links updated to https://github.com/Fovane/yuspec
+
+---
+
 ## [1.0.0] — 2026-03-03
 
 ### Added — Language

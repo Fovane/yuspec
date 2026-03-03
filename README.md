@@ -1,6 +1,6 @@
 # YUSPEC
 
-> **Entity-Behavior Programming — a declarative language for event-driven systems**
+> **Entity-Behavior Programming — a behavioral specification language for modeling event-driven systems**
 
 ```yuspec
 define entity Player {
@@ -36,14 +36,19 @@ Assertions: 1 passed, 0 failed    PASS
 
 ## What is YUSPEC?
 
-YUSPEC (**Y**our **U**niversal **Spec**ification Language) is a domain-agnostic,
-declarative programming language built on the **Entity-Behavior Programming (EBP)**
+YUSPEC (**Y**our **U**niversal **Spec**ification Language) is a declarative
+behavioral specification language built on the **Entity-Behavior Programming (EBP)**
 paradigm.
 
 Programs are collections of **Entities** (typed archetypes with property tables) and
 **Behaviors** (composable finite-state machines that react to events, timeouts, and
 conditions). Communication happens exclusively through a global **EventBus** —
 entities never hold direct references to each other.
+
+> **Important distinction:** YUSPEC is a *modeling and simulation* language. It does
+> not send real TCP packets, read physical sensor data, or perform actual deployments.
+> It models the *behavioral logic* of these systems — the state machines, event flows,
+> and decision rules — in a unified, testable notation.
 
 | Concept | YUSPEC construct |
 |---------|-----------------|
@@ -57,12 +62,13 @@ entities never hold direct references to each other.
 
 ## Why YUSPEC?
 
-### One language, seven domains
+### One language, seven modeling domains
 
-The same language — unchanged — runs across radically different problem spaces:
+The same language models behavioral logic across different problem spaces.
+All examples are FSM-based simulations — YUSPEC's strength is providing a unified
+notation for event-driven state machines regardless of the domain:
 
 | Domain | Example |
-|--------|---------|
 | 🎮 Game Development      | `examples/game/01_mmo.yus` — MMO RPG with combat, quests, leveling |
 | 🌐 Network Protocols     | `examples/network/01_tcp_handshake.yus` — TCP state machine |
 | 📋 Workflow Automation   | `examples/workflow/01_approval.yus` — multi-stage approval + escalation |
@@ -97,7 +103,7 @@ give structured pass/fail reporting with zero boilerplate.
 ### Build
 
 ```bash
-git clone https://github.com/<your-username>/yuspec.git
+git clone https://github.com/Fovane/yuspec.git
 cd yuspec
 
 # Configure
@@ -370,29 +376,92 @@ and stores it as `pending_transition_`. After every action block (event handler,
 
 ---
 
+## Known Limitations
+
+We believe in being honest about what YUSPEC v1.0 can and cannot do.
+
+### Modeling, not execution
+
+YUSPEC **models** the behavioral logic of systems. It does not:
+- Send real network packets (TCP example models the *state machine*, not the wire protocol)
+- Read physical sensors (IoT example models *thresholds and reactions*, not hardware I/O)
+- Perform actual deployments (distributed example models *orchestration logic*, not infrastructure)
+
+The value proposition is a *unified behavioral notation*, not runtime integration with external systems. Think of it as "executable specifications" — closer to TLA+ or Alloy in intent, but with a developer-friendly syntax.
+
+### Tree-walking interpreter (slow)
+
+The current runtime evaluates AST nodes directly. Approximate performance:
+
+| Approach | Relative Speed |
+|----------|---------------|
+| Tree-walking (current) | 1x (baseline) |
+| Bytecode VM (planned v1.2) | ~20-50x |
+| JIT (future) | ~100-500x |
+
+For simulations up to ~1,000 entities, v1.0 is adequate. For 10,000+ entities,
+a bytecode VM is necessary. This is the **#1 priority** for v1.2.
+
+### Global EventBus scalability
+
+The single global EventBus checks every handler on every `emit`. With 1,000 entities
+× 5 handlers each, that's 5,000 callback checks per event. Current mitigations: none.
+
+Planned:
+- Event filtering / topic-based routing
+- Entity-scoped event channels
+- Circular event chain detection (infinite loop prevention)
+- Event tracing / visualization for debugging
+
+### Shallow type system
+
+v1.0 provides basic types (`int`, `float`, `bool`, `string`, `duration`, `list`, `map`)
+and an `any` escape hatch. Notable gaps:
+
+| Missing Feature | Impact |
+|----------------|--------|
+| `define enum` | No `DamageType.Physical` — must use magic strings |
+| Generic types | No `list<int>` — all lists are heterogeneous |
+| Entity reference type | No `property target: Entity<Monster>` |
+| Algebraic data types | No `Option<T>`, `Result<T,E>` |
+
+The `any` type is an honest admission that the type system is incomplete.
+Full type inference and custom types are planned for v1.1.
+
+### No module system
+
+All definitions must live in a single `.yus` file. No `import`, no namespaces,
+no behavior libraries. This is the **#2 priority** for v1.1.
+
+---
+
 ## Roadmap
 
-### v1.1 — Language
-- Function definitions: `define function name(args) -> type { ... }`
-- Pattern matching: `match value { case X: ... }`
+### v1.1 — Language (priority: type system + modularity)
+- `define enum` — enumerated types: `define enum DamageType { Physical, Magical, True }`
+- `define function` — named functions: `define function clamp(x, lo, hi) -> float { ... }`
 - Import system: `import "path/file.yus"`
 - String interpolation: `"Player {self.name} has {self.hp} HP"`
-- Full type inference
+- Entity reference types: `property target: Entity<Monster>`
+- Full type inference — remove need for `any` escape hatch
 
-### v1.2 — Runtime
-- Bytecode compiler + VM (10-100x performance)
+### v1.2 — Runtime (priority: performance + EventBus)
+- **Bytecode compiler + VM** — target 20-50x speedup over tree-walking
+- Event filtering / topic-based routing — solve O(N×M) dispatch
+- Circular event chain detection — prevent infinite loops at runtime
+- Event tracing: `--trace` flag dumps full event flow graph
 - Parallel zones with message passing
 - Persistent state: serialize/deserialize World snapshots
-- Time acceleration / deterministic replay
 
 ### v1.3 — Tooling
 - Language Server Protocol (LSP)
 - VS Code extension: syntax highlighting, hover docs, inline errors
-- Visual FSM editor
-- Profiler: per-behavior tick timing
+- Visual FSM editor + event flow visualization
+- Profiler: per-behavior tick timing, event throughput metrics
 
-### v2.0 — Distributed
-- Network-transparent EventBus (cross-process / cross-machine event routing)
+### v2.0 — External Integration
+- Network-transparent EventBus (bridge to real systems via adapters)
+- Plugin API: custom event sources (real sensors, network sockets, databases)
 - Cluster mode: entities auto-sharded across nodes
 - Hot-reload behaviors without stopping simulation
 
@@ -470,8 +539,8 @@ define behavior TemperatureSensor {
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build, test, and submit changes.
 
-Bug reports → [GitHub Issues](https://github.com/<your-username>/yuspec/issues)  
-Discussion → [GitHub Discussions](https://github.com/<your-username>/yuspec/discussions)
+Bug reports → [GitHub Issues](https://github.com/Fovane/yuspec/issues)  
+Discussion → [GitHub Discussions](https://github.com/Fovane/yuspec/discussions)
 
 ---
 

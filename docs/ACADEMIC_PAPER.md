@@ -1,4 +1,4 @@
-# Entity-Behavior Programming: A Declarative Paradigm for Event-Driven Systems
+# Entity-Behavior Programming: A Behavioral Specification Paradigm for Modeling Event-Driven Systems
 
 **Yucel**  
 Independent Researcher  
@@ -13,11 +13,18 @@ paradigm in which programs consist of typed *entities* (archetypes with property
 tables), composable *behaviors* (finite-state machines that react to events,
 timeouts, and conditions), and a global *EventBus* that decouples producers from
 consumers. We describe YUSPEC, a statically-analyzed, tree-walking interpreted
-language that realizes EBP, and demonstrate through seven representative domain
-examples — game development, network protocol simulation, workflow automation,
-distributed system orchestration, IoT monitoring, traffic simulation, and
-structured testing — that a single language design can address a wide class of
-event-driven, concurrent-by-nature problems with minimal conceptual overhead.
+language that realizes EBP, and demonstrate through seven modeling examples —
+game logic, network protocol state machines, workflow automation, deployment
+orchestration, IoT monitoring, traffic simulation, and structured testing — that
+a single language design can model the *behavioral logic* of a wide class of
+event-driven systems with minimal conceptual overhead.
+
+We emphasize that YUSPEC v1.0 is a **behavioral specification and simulation**
+language: it models state machines, event flows, and decision rules, but does not
+interact with real network sockets, physical sensors, or deployment infrastructure.
+The value proposition is a unified notation for event-driven state machine modeling
+across domains, not runtime integration with external systems.
+
 The YUSPEC v1.0 implementation consists of 16 C++17 source files, compiles
 without external dependencies, and achieves 100% pass rate on 45 structured
 assertions (34 language-feature tests + 11 integration tests in a full MMO RPG
@@ -62,8 +69,8 @@ a language designed around it. Our main contributions are:
   test harness (Sections 3–5).
 - An implementation of YUSPEC v1.0 in C++17 with a recursive-descent compiler
   and tree-walking interpreter (Section 6).
-- Empirical demonstration of domain-agnosticism across seven distinct problem
-  domains (Section 7).
+- Empirical demonstration of behavioral modeling across seven distinct problem
+  domains, with an honest assessment of scope and limitations (Section 7).
 - Discussion of design tradeoffs, limitations, and future directions (Section 8).
 
 ---
@@ -506,19 +513,41 @@ the test model.
 
 ### 8.2 Known Limitations
 
+**Simulation, not integration.** All seven domain examples are behavioral
+simulations. YUSPEC does not send real TCP packets, read physical sensor data,
+or perform actual cloud deployments. The examples demonstrate that the *behavioral
+logic* of these systems can be modeled in a unified notation, not that YUSPEC
+replaces domain-specific runtime infrastructure. This is analogous to how TLA+ [23]
+models distributed algorithms without executing them on real clusters. Future versions
+may provide a plugin API for bridging to external systems.
+
+**All examples reduce to FSM simulation.** A fair critic would observe that all
+seven domains are structurally similar: entities with state machines communicating
+through events. This is by design — EBP deliberately constrains the computational
+model to this pattern. The claim is not that YUSPEC solves arbitrary problems, but
+that a surprisingly wide class of real-world systems share this structure and benefit
+from a unified notation.
+
+**Global EventBus scalability.** The single global EventBus performs an O(N×M)
+check on every `emit` (N entities × M handlers). For simulations with 1,000+
+entities, this becomes a bottleneck. Mitigations planned for v1.2 include
+topic-based routing, entity-scoped channels, and circular event chain detection.
+
 **No function definitions in v1.0.** Complex computations that would naturally be
 abstracted into a named function must be inlined. This is the most frequently
 cited missing feature. Planned for v1.1.
 
 **Tree-walking performance.** The current interpreter evaluates AST nodes directly,
-which is approximately 100x slower than compiled bytecode for CPU-intensive
-simulations. For the target use cases (thousands of entities at game simulation
-rates), this is acceptable. For high-frequency trading or real-time control
-systems, it would not be. Bytecode compilation is planned for v1.2.
+which is approximately 20–50x slower than compiled bytecode for CPU-intensive
+simulations. For the target use cases (hundreds of entities at simulation rates),
+this is acceptable. For 10,000+ entity simulations, a bytecode VM (planned v1.2)
+is necessary.
 
-**Partial type inference.** The `any` escape hatch is sometimes required for
-dynamic property table access patterns. Full static typing would improve tooling
-(autocomplete, early error catching) but would also increase language complexity.
+**Shallow type system.** The `any` escape hatch is an honest admission that the
+type system is incomplete. Notable gaps include: no user-defined enum types
+(requiring magic strings for categorical data), no generic/parametric types
+(`list<int>`), and no entity reference types (`Entity<Monster>`). Full type
+inference and custom types are planned for v1.1.
 
 **No import system.** All definitions must exist in a single file. Multi-file
 programs are not supported in v1.0.
@@ -547,7 +576,32 @@ composability for determinism and debuggability.
 
 ---
 
-## 9. Conclusion
+## 9. Threats to Validity
+
+**Construct validity.** Our claim is that EBP provides a *unified behavioral
+notation*, not that it replaces domain-specific runtimes. All seven examples
+are FSM-based simulations by construction. We do not claim YUSPEC can replace
+a real TCP stack, a real HVAC controller, or a real deployment pipeline. The
+common structure across domains (entities + state machines + events) is the
+paradigm's strength and its boundary.
+
+**Internal validity.** The 45 test assertions are necessary but not sufficient to
+prove correctness. The test suite verifies specific scenarios, not all possible
+behaviors. Property-based testing and formal verification are areas for future
+work.
+
+**External validity.** All examples were written by the language's author, which
+introduces bias in domain selection and coding style. Independent replication by
+third-party users is needed to validate ergonomics and expressiveness claims.
+
+**Performance claims.** The tree-walking interpreter has not been systematically
+benchmarked. The "20–50x" estimate for bytecode VM improvement is based on
+literature analogy, not measurement. Rigorous benchmarking will accompany the
+v1.2 VM implementation.
+
+---
+
+## 10. Conclusion
 
 We have presented Entity-Behavior Programming (EBP), a novel declarative paradigm
 for event-driven systems, and YUSPEC, a language that realizes it. Through seven
@@ -563,13 +617,22 @@ typed, and explicit in the language itself, programs become more readable,
 testable, and maintainable than equivalent implementations in general-purpose
 languages with event-handling libraries.
 
-YUSPEC v1.0 is a first, working realization of this idea. The implementation
-demonstrates that EBP is not merely a theoretical construct: it compiles, runs,
-and passes all tests across all seven domains with a single, unchanged language.
+We acknowledge the boundaries of this work. YUSPEC v1.0 is a behavioral
+specification language, not a systems programming language. It models event-driven
+logic; it does not replace domain-specific infrastructure. The type system is
+incomplete, the interpreter is slow for large-scale simulations, and the global
+EventBus does not scale to thousands of entities. These are honest limitations
+that define the roadmap for future versions.
 
-Future work will address function definitions, full type inference, bytecode
-compilation, an import system, Language Server Protocol support, and distributed
-execution across multiple machines.
+Nevertheless, we believe the core paradigm — entities with composable FSM
+behaviors communicating through typed events — captures a recurring pattern in
+software engineering that deserves first-class language support. YUSPEC v1.0 is a
+first, working realization of this idea.
+
+Future work will address function definitions, enum types, full type inference,
+bytecode compilation, event bus routing/filtering, an import system,
+Language Server Protocol support, and external system integration through a
+plugin API.
 
 ---
 
@@ -631,7 +694,10 @@ Engineering*, 23(5), 1997.
 
 [22] E. Meijer, "Your Mouse is a Database," *ACM Queue*, 10(3), 2012.
 
+[23] L. Lamport, "Specifying Systems: The TLA+ Language and Tools for Hardware
+and Software Engineers," Addison-Wesley, 2002.
+
 ---
 
-*YUSPEC source code: https://github.com/<your-username>/yuspec*  
+*YUSPEC source code: https://github.com/Fovane/yuspec*  
 *License: MIT*
