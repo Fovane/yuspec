@@ -1,0 +1,85 @@
+entity Player {
+    inventory = []
+    quest = None
+}
+
+entity Door {
+    state = Closed
+    key = "IronKey"
+}
+
+entity Chest {
+    state = Closed
+    reward = "Gold"
+}
+
+entity Goblin {
+    health = 30
+    damage = 5
+    drops = "GoldCoin"
+}
+
+entity Boss {
+    state = Phase1
+    health = 100
+}
+
+on Player.Pickup with IronKey:
+    give Player "IronKey"
+    play_sound "item_pickup"
+
+on Player.Interact with Door when Player.has(Door.key):
+    set Door.state = Open
+    play_animation Door "Open"
+    play_sound "door_open"
+
+on Player.Interact with Chest when Chest.state == Closed:
+    set Chest.state = Open
+    give Player Chest.reward
+    play_animation Chest "Open"
+
+behavior GoblinAI for Goblin {
+    state Idle {
+        on PlayerSeen -> Chase
+    }
+
+    state Chase {
+        every 0.2s:
+            move_towards Player speed 3
+
+        on InAttackRange -> Attack
+        on PlayerLost -> Idle
+    }
+
+    state Attack {
+        every 1s:
+            damage Player by self.damage
+
+        on PlayerOutOfRange -> Chase
+        on self.health <= 0 -> Dead
+    }
+
+    state Dead {
+        do:
+            spawn self.drops at self.position
+            destroy self
+    }
+}
+
+on Player.EnterZone("VillageGate"):
+    start_quest "ClearTheDungeon"
+
+on Player.EnterZone("BossRoom"):
+    lock Door.BossRoom
+    spawn Boss at BossSpawnPoint
+    play_music "boss_theme"
+
+on Boss.HealthBelow(50%):
+    set_state Boss Phase2
+    play_cutscene "BossPhase2Intro"
+    play_music "boss_phase_2"
+
+on Boss.Died:
+    unlock Door.Exit
+    give Player "AncientKey"
+    complete_quest "ClearTheDungeon"

@@ -1,0 +1,15 @@
+entity Door {
+    state = Closed
+    key = "IronKey"
+}
+
+on Player.Interact with Door when Player.has(Door.key):
+    set Door.state = Open
+    play_animation Door "Open"
+    play_sound "door_open"
+
+scenario "door opens with key" {
+    given Player has "IronKey"
+    when Player.Interact Door
+    expect Door.state == Open
+}

@@ -1,0 +1,9 @@
+entity Boss {
+    state = Phase1
+    health = 100
+}
+
+on Boss.HealthBelow(50%):
+    set_state Boss Phase2
+    play_cutscene "BossPhase2Intro"
+    play_music "boss_phase_2"

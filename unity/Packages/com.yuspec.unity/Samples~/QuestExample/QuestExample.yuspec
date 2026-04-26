@@ -1,0 +1,6 @@
+on Player.EnterZone("VillageGate"):
+    start_quest "FindTheBlacksmith"
+
+on Player.EnterZone("BlacksmithHouse") when Quest.Active("FindTheBlacksmith"):
+    complete_quest "FindTheBlacksmith"
+    give Player "BlacksmithToken"

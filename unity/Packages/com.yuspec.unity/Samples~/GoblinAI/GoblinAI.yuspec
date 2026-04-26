@@ -1,0 +1,33 @@
+entity Goblin {
+    health = 30
+    damage = 5
+    drops = "GoldCoin"
+}
+
+behavior GoblinAI for Goblin {
+    state Idle {
+        on PlayerSeen -> Chase
+    }
+
+    state Chase {
+        every 0.2s:
+            move_towards Player speed 3
+
+        on InAttackRange -> Attack
+        on PlayerLost -> Idle
+    }
+
+    state Attack {
+        every 1s:
+            damage Player by self.damage
+
+        on PlayerOutOfRange -> Chase
+        on self.health <= 0 -> Dead
+    }
+
+    state Dead {
+        do:
+            spawn self.drops at self.position
+            destroy self
+    }
+}
