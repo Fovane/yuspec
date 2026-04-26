@@ -13,7 +13,8 @@
 - `com.yuspec.unity` package manifest.
 - Runtime and editor asmdefs.
 - Runtime bridge classes.
-- Debug window placeholder.
+- Debug window with loaded specs, parsed handlers, diagnostics, entities, events,
+  and trace output.
 - Samples and package docs.
 
 Success criterion: Unity can add the package locally and the debugger menu item
@@ -33,7 +34,7 @@ called by name.
 ## Phase 3 - Minimal Runtime
 
 - Door example syntax.
-- Minimal lexer/parser or adapter from the existing compiler.
+- Minimal line-oriented Unity parser for the Door subset.
 - Entity declarations.
 - Event handler matching.
 - `Player.has(Door.key)` condition.
@@ -41,6 +42,9 @@ called by name.
 - Debug trace for events, conditions, and actions.
 
 Success criterion: Door opens in Unity only when the player has the required key.
+
+Current status: implemented in the Unity package scaffold, pending verification
+inside an actual Unity project.
 
 ## Phase 4 - State Machines
 

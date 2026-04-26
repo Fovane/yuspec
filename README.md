@@ -213,15 +213,15 @@ unity/Packages/com.yuspec.unity
 ```
 
 It includes the UPM manifest, runtime assembly, editor assembly, sample `.yuspec`
-files, package docs, and a placeholder debugger window under:
+files, package docs, and a debugger window under:
 
 ```text
 Window > YUSPEC > Debugger
 ```
 
 The scaffold is intentionally honest: it does not pretend the full DSL runtime is
-already connected to Unity. Parser and runtime integration will be implemented
-through small vertical slices, starting with the Door example.
+complete. The Door-style subset now has a minimal Unity parser/runtime slice;
+state machines, scenarios, and the Demo Dungeon remain roadmap work.
 
 ## Existing C++ Runtime
 
@@ -241,7 +241,7 @@ Phase 0: Repo pivot
 - README, docs, Unity examples, and package scaffold.
 
 Phase 1: Unity package scaffold
-- UPM manifest, asmdefs, runtime classes, editor debugger placeholder, samples.
+- UPM manifest, asmdefs, runtime classes, editor debugger, samples.
 
 Phase 2: Action registry
 - Reflection-based C# action discovery, duplicate detection, argument validation,

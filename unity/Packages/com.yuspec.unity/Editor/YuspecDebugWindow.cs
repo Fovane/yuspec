@@ -42,8 +42,10 @@ namespace Yuspec.Unity.Editor
             DrawLoadedSpecs(runtime);
             DrawDiagnostics(runtime);
             DrawRegisteredActions(runtime);
+            DrawParsedHandlers(runtime);
             DrawSceneEntities(runtime);
             DrawRecentEvents(runtime);
+            DrawDebugTrace(runtime);
             DrawCurrentStates(runtime);
 
             EditorGUILayout.EndScrollView();
@@ -76,6 +78,16 @@ namespace Yuspec.Unity.Editor
             }
         }
 
+        private static void DrawParsedHandlers(YuspecRuntime runtime)
+        {
+            DrawSection("Parsed Handlers");
+            foreach (var handler in runtime.CompiledSpecs.SelectMany(spec => spec.EventHandlers))
+            {
+                var target = string.IsNullOrWhiteSpace(handler.TargetType) ? string.Empty : $" with {handler.TargetType}";
+                EditorGUILayout.LabelField($"{handler.EventName}{target} actions={handler.Actions.Count}");
+            }
+        }
+
         private static void DrawSceneEntities(YuspecRuntime runtime)
         {
             DrawSection("Scene Entities");
@@ -91,6 +103,15 @@ namespace Yuspec.Unity.Editor
             foreach (var yuspecEvent in runtime.RecentEvents.Reverse())
             {
                 EditorGUILayout.LabelField(yuspecEvent.ToString(), EditorStyles.wordWrappedLabel);
+            }
+        }
+
+        private static void DrawDebugTrace(YuspecRuntime runtime)
+        {
+            DrawSection("Debug Trace");
+            foreach (var trace in runtime.DebugTrace.Reverse())
+            {
+                EditorGUILayout.LabelField(trace, EditorStyles.wordWrappedLabel);
             }
         }
 
@@ -111,10 +132,14 @@ namespace Yuspec.Unity.Editor
             EditorGUILayout.LabelField("No runtime diagnostics.");
             DrawSection("Registered Actions");
             EditorGUILayout.LabelField("No runtime action registry.");
+            DrawSection("Parsed Handlers");
+            EditorGUILayout.LabelField("No parsed handlers.");
             DrawSection("Scene Entities");
             EditorGUILayout.LabelField("No scene entities.");
             DrawSection("Recent Events");
             EditorGUILayout.LabelField("No events.");
+            DrawSection("Debug Trace");
+            EditorGUILayout.LabelField("No trace.");
             DrawSection("Current States");
             EditorGUILayout.LabelField("No states.");
         }

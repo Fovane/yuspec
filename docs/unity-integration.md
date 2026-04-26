@@ -58,8 +58,8 @@ events, failed conditions, and scenario results.
 
 ### YuspecSpecAsset
 
-Planned import/runtime representation for `.yuspec` files. The initial scaffold
-uses `TextAsset[]` while the importer and parsed representation are designed.
+Import/runtime representation for `.yuspec` files. The Unity runtime accepts
+imported `YuspecSpecAsset` objects and plain `TextAsset` sources.
 
 ## Integration Rule
 

@@ -15,7 +15,7 @@ The debugger should eventually show:
 
 ## Unity Editor Window
 
-The Unity package includes a placeholder window:
+The Unity package includes a debugger window:
 
 ```text
 Window > YUSPEC > Debugger
@@ -30,7 +30,8 @@ Initial sections:
 - Recent Events
 - Current States
 
-The first useful debugger milestone is the Door example:
+The first useful debugger milestone is the Door example, now represented by the
+runtime debug trace:
 
 ```text
 Player.Interact with Door

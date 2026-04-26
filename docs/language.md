@@ -1,7 +1,8 @@
 # Language
 
-This document defines the intended Unity MVP syntax. It is a product target, not
-a claim that every construct is implemented today.
+This document defines the intended Unity MVP syntax. The Door-style entity,
+handler, condition, and action subset is implemented in the Unity package
+scaffold. State machines and scenarios remain product targets.
 
 ## Entity
 
@@ -101,8 +102,9 @@ scenario "door opens with key" {
 
 Scenario tests should let gameplay logic run without manually driving a Unity
 scene. The Unity editor runner can later surface these results in the debugger.
+Scenario blocks are currently skipped by the Unity parser.
 
 ## MVP Constraint
 
-The first working slice should only support the Door example end to end. The
-language should expand from working demos, not from speculative syntax.
+The first working slice supports the Door example subset. The language should
+expand from working demos, not from speculative syntax.
