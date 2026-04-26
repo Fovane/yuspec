@@ -33,7 +33,7 @@ The project references the package through `Packages/manifest.json`:
 & "C:\Program Files\Unity\Hub\Editor\6000.3.8f1\Editor\Unity.exe" -projectPath "C:\Users\yucel\OneDrive\LaptopDesktop\Yuspec Projesi\Main\unity\YuspecUnityDev"
 ```
 
-## Rebuild Door Example Scene
+## Rebuild Door+Chest Example Scene
 
 Inside Unity:
 
@@ -53,10 +53,16 @@ From PowerShell:
 & "C:\Program Files\Unity\Hub\Editor\6000.3.8f1\Editor\Unity.exe" -batchmode -quit -projectPath "C:\Users\yucel\OneDrive\LaptopDesktop\Yuspec Projesi\Main\unity\YuspecUnityDev" -executeMethod Yuspec.Dev.Editor.YuspecDevSceneBuilder.ValidateDoorExampleRuntimeBatch -logFile "C:\Users\yucel\OneDrive\LaptopDesktop\Yuspec Projesi\Main\unity\YuspecUnityDev-validate.log"
 ```
 
+For CI-style rebuild plus validation in one pass:
+
+```powershell
+& "C:\Program Files\Unity\Hub\Editor\6000.3.8f1\Editor\Unity.exe" -batchmode -quit -projectPath "C:\Users\yucel\OneDrive\LaptopDesktop\Yuspec Projesi\Main\unity\YuspecUnityDev" -executeMethod Yuspec.Dev.Editor.YuspecDevSceneBuilder.RebuildAndValidateDoorExampleSceneBatch -logFile "C:\Users\yucel\OneDrive\LaptopDesktop\Yuspec Projesi\Main\unity\YuspecUnityDev-rebuild-validate.log"
+```
+
 Expected result:
 
 ```text
-YUSPEC Door runtime validation passed: Door.state == Open.
+YUSPEC Door+Chest runtime validation passed: Door.state == Open, Chest.state == Open, Player has Gold.
 ```
 
 ## Manual Debugging
@@ -77,10 +83,14 @@ Expected debugger data:
 
 - Loaded `DoorExample.yuspec`
 - Parsed `Player.Interact with Door` handler
+- Parsed `Player.Interact with Chest` handler
 - Recent `Player.Interact` event
 - Passed `Player.has(Door.key)` condition
 - `Door.state = Open`
-- `play_animation` and `play_sound` action trace
+- Passed `Chest.state == Closed` condition
+- `Chest.state = Open`
+- `Player.inventory = IronKey, Gold`
+- `play_animation`, `play_sound`, and `give` action trace
 
 ## Git Hygiene
 

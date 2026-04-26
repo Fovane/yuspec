@@ -23,11 +23,16 @@ Planned diagnostics:
 
 ## Initial Scaffold Coverage
 
-The Unity scaffold can already report basic runtime-level problems:
+The Unity runtime can already report these runtime and source-level problems for
+the implemented event-handler subset:
 
 - Duplicate action binding name
 - Empty action name
 - Unknown action during direct runtime execution
+- Unknown action while loading specs
+- Wrong action argument count while loading specs
+- Unknown entity in handler, condition, action, or value reference
+- Unknown property in condition, set action, or value reference
 - Empty event name
 - Duplicate entity id in the scene
 

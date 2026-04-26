@@ -1,6 +1,15 @@
+entity Player {
+    inventory = []
+}
+
 entity Door {
     state = Closed
     key = "IronKey"
+}
+
+entity Chest {
+    state = Closed
+    reward = "Gold"
 }
 
 on Player.Interact with Door when Player.has(Door.key):
@@ -8,8 +17,19 @@ on Player.Interact with Door when Player.has(Door.key):
     play_animation Door "Open"
     play_sound "door_open"
 
+on Player.Interact with Chest when Chest.state == Closed:
+    set Chest.state = Open
+    give Player Chest.reward
+    play_sound "chest_open"
+
 scenario "door opens with key" {
     given Player has "IronKey"
     when Player.Interact Door
     expect Door.state == Open
+}
+
+scenario "chest gives gold" {
+    given Chest.state == Closed
+    when Player.Interact Chest
+    expect Player has "Gold"
 }

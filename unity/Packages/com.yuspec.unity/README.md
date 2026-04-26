@@ -11,9 +11,10 @@ This package currently provides the Unity-facing scaffold:
 - Editor debugger window
 - Sample `.yuspec` files
 
-The Door-style subset is implemented as the first runtime slice: entity
+The Door+Chest subset is implemented as the first runtime slice: entity
 properties, `on Actor.Event with Target when ...:`, `Player.has(Door.key)`,
-`set`, `play_animation`, `play_sound`, and debugger trace.
+`Target.state == Closed`, `set`, `play_animation`, `play_sound`, `give`, strict
+diagnostics, and debugger trace.
 
 State machines, scenarios, and the full Demo Dungeon remain roadmap work.
 

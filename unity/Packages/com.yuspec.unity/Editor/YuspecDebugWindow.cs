@@ -23,6 +23,18 @@ namespace Yuspec.Unity.Editor
             {
                 GUILayout.Label("YUSPEC Debugger", EditorStyles.boldLabel);
                 GUILayout.FlexibleSpace();
+                if (runtime != null && GUILayout.Button("Reload Specs", EditorStyles.toolbarButton))
+                {
+                    runtime.Initialize();
+                    Repaint();
+                }
+
+                if (runtime != null && GUILayout.Button("Clear Trace", EditorStyles.toolbarButton))
+                {
+                    runtime.ClearTrace();
+                    Repaint();
+                }
+
                 if (GUILayout.Button("Refresh", EditorStyles.toolbarButton))
                 {
                     Repaint();
@@ -63,9 +75,18 @@ namespace Yuspec.Unity.Editor
         private static void DrawDiagnostics(YuspecRuntime runtime)
         {
             DrawSection("Diagnostics");
+            if (!runtime.Diagnostics.Any())
+            {
+                EditorGUILayout.LabelField("No diagnostics.");
+                return;
+            }
+
             foreach (var diagnostic in runtime.Diagnostics)
             {
-                EditorGUILayout.LabelField(diagnostic.ToString(), EditorStyles.wordWrappedLabel);
+                var style = diagnostic.severity == YuspecDiagnosticSeverity.Error
+                    ? EditorStyles.helpBox
+                    : EditorStyles.wordWrappedLabel;
+                EditorGUILayout.LabelField(diagnostic.ToString(), style);
             }
         }
 
@@ -94,6 +115,10 @@ namespace Yuspec.Unity.Editor
             foreach (var entity in runtime.Entities.OrderBy(entity => entity.EntityId))
             {
                 EditorGUILayout.LabelField($"{entity.EntityId} type={entity.EntityType} state={entity.CurrentState}");
+                foreach (var property in entity.Properties.OrderBy(property => property.Key))
+                {
+                    EditorGUILayout.LabelField($"  {property.Key}", FormatValue(property.Value));
+                }
             }
         }
 
@@ -109,9 +134,15 @@ namespace Yuspec.Unity.Editor
         private static void DrawDebugTrace(YuspecRuntime runtime)
         {
             DrawSection("Debug Trace");
-            foreach (var trace in runtime.DebugTrace.Reverse())
+            if (!runtime.TraceEntries.Any())
             {
-                EditorGUILayout.LabelField(trace, EditorStyles.wordWrappedLabel);
+                EditorGUILayout.LabelField("No trace.");
+                return;
+            }
+
+            foreach (var trace in runtime.TraceEntries.Reverse())
+            {
+                EditorGUILayout.LabelField(trace.ToString(), EditorStyles.wordWrappedLabel);
             }
         }
 
@@ -148,6 +179,21 @@ namespace Yuspec.Unity.Editor
         {
             EditorGUILayout.Space(8);
             EditorGUILayout.LabelField(title, EditorStyles.boldLabel);
+        }
+
+        private static string FormatValue(object value)
+        {
+            if (value == null)
+            {
+                return "null";
+            }
+
+            if (value is System.Collections.IEnumerable values && !(value is string))
+            {
+                return string.Join(", ", values.Cast<object>().Select(item => item?.ToString() ?? "null"));
+            }
+
+            return value.ToString();
         }
 
         private static YuspecRuntime FindRuntime()

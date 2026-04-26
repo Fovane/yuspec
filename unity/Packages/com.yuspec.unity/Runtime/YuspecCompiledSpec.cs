@@ -14,6 +14,40 @@ namespace Yuspec.Unity
         }
     }
 
+    public enum YuspecTraceKind
+    {
+        Event,
+        HandlerMatched,
+        ConditionPassed,
+        ConditionFailed,
+        ActionExecuted,
+        Diagnostic
+    }
+
+    public sealed class YuspecTraceEntry
+    {
+        public YuspecTraceKind Kind { get; }
+        public string Message { get; }
+        public string SourceName { get; }
+        public int Line { get; }
+        public float Time { get; }
+
+        public YuspecTraceEntry(YuspecTraceKind kind, string message, string sourceName = "", int line = 0, float time = 0f)
+        {
+            Kind = kind;
+            Message = message;
+            SourceName = sourceName;
+            Line = line;
+            Time = time;
+        }
+
+        public override string ToString()
+        {
+            var location = string.IsNullOrEmpty(SourceName) ? string.Empty : $" {SourceName}:{Line}";
+            return $"{Time:0.000} [{Kind}]{location} {Message}";
+        }
+    }
+
     public sealed class YuspecEntityDeclaration
     {
         public string EntityType { get; }

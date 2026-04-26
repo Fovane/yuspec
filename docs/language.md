@@ -1,8 +1,8 @@
 # Language
 
-This document defines the intended Unity MVP syntax. The Door-style entity,
-handler, condition, and action subset is implemented in the Unity package
-scaffold. State machines and scenarios remain product targets.
+This document defines the intended Unity MVP syntax. The Door+Chest entity,
+handler, condition, and action subset is implemented in the Unity package.
+State machines and executable scenarios remain product targets.
 
 ## Entity
 
@@ -106,5 +106,5 @@ Scenario blocks are currently skipped by the Unity parser.
 
 ## MVP Constraint
 
-The first working slice supports the Door example subset. The language should
-expand from working demos, not from speculative syntax.
+The first working slice supports the Door+Chest example subset. The language
+should expand from working demos, not from speculative syntax.

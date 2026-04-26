@@ -30,8 +30,8 @@ Initial sections:
 - Recent Events
 - Current States
 
-The first useful debugger milestone is the Door example, now represented by the
-runtime debug trace:
+The first useful debugger milestone is the Door+Chest example, now represented
+by the runtime debug trace:
 
 ```text
 Player.Interact with Door
@@ -39,6 +39,10 @@ condition Player.has(Door.key) passed
 set Door.state = Open
 play_animation Door "Open"
 play_sound "door_open"
+Player.Interact with Chest
+condition Chest.state == Closed passed
+set Chest.state = Open
+give Player "Gold"
 ```
 
 If the player has no key, the debugger should show the failed condition instead

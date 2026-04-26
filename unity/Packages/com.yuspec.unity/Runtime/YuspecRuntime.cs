@@ -16,6 +16,7 @@ namespace Yuspec.Unity
         private readonly List<YuspecDiagnostic> diagnostics = new List<YuspecDiagnostic>();
         private readonly List<YuspecEvent> recentEvents = new List<YuspecEvent>();
         private readonly List<string> debugTrace = new List<string>();
+        private readonly List<YuspecTraceEntry> traceEntries = new List<YuspecTraceEntry>();
         private readonly YuspecActionRegistry actionRegistry = new YuspecActionRegistry();
 
         public IReadOnlyList<UnityEngine.Object> Specs => specs ?? Array.Empty<UnityEngine.Object>();
@@ -25,6 +26,7 @@ namespace Yuspec.Unity
         public IReadOnlyList<YuspecDiagnostic> Diagnostics => diagnostics;
         public IReadOnlyList<YuspecEvent> RecentEvents => recentEvents;
         public IReadOnlyList<string> DebugTrace => debugTrace;
+        public IReadOnlyList<YuspecTraceEntry> TraceEntries => traceEntries;
         public IReadOnlyCollection<YuspecEntity> Entities => entitiesById.Values;
 
         private void Awake()
@@ -38,6 +40,7 @@ namespace Yuspec.Unity
             diagnostics.Clear();
             recentEvents.Clear();
             debugTrace.Clear();
+            traceEntries.Clear();
             actionRegistry.RegisterFromLoadedAssemblies();
             diagnostics.AddRange(actionRegistry.Diagnostics);
             LoadSpecs();
@@ -93,6 +96,7 @@ namespace Yuspec.Unity
             }
 
             ValidateActionBindings();
+            ValidateStrictReferences();
             ApplyDeclarationsToRegisteredEntities();
         }
 
@@ -153,7 +157,7 @@ namespace Yuspec.Unity
 
             var yuspecEvent = new YuspecEvent(eventName, actor, target);
             recentEvents.Add(yuspecEvent);
-            AddTrace($"event {yuspecEvent}");
+            AddTrace(YuspecTraceKind.Event, yuspecEvent.ToString());
             if (recentEvents.Count > maxRecentEvents)
             {
                 recentEvents.RemoveAt(0);
@@ -166,17 +170,17 @@ namespace Yuspec.Unity
                     continue;
                 }
 
-                AddTrace($"handler matched {handler.SourceName}:{handler.Line} {handler.EventName}");
+                AddTrace(YuspecTraceKind.HandlerMatched, $"handler matched {handler.EventName}", handler.SourceName, handler.Line);
                 if (!EvaluateCondition(handler.Condition, actor, target))
                 {
-                    AddTrace($"condition failed for {handler.EventName}");
+                    AddTrace(YuspecTraceKind.ConditionFailed, $"condition failed for {handler.EventName}", handler.SourceName, handler.Line);
                     continue;
                 }
 
-                AddTrace($"condition passed for {handler.EventName}");
+                AddTrace(YuspecTraceKind.ConditionPassed, $"condition passed for {handler.EventName}", handler.SourceName, handler.Line);
                 foreach (var action in handler.Actions)
                 {
-                    ExecuteActionCall(action, actor, target);
+                    ExecuteActionCall(action, actor, target, handler);
                 }
             }
         }
@@ -199,6 +203,13 @@ namespace Yuspec.Unity
             return entitiesById.TryGetValue(entityId, out entity);
         }
 
+        public void ClearTrace()
+        {
+            recentEvents.Clear();
+            debugTrace.Clear();
+            traceEntries.Clear();
+        }
+
         private void ValidateActionBindings()
         {
             foreach (var action in compiledSpecs.SelectMany(spec => spec.EventHandlers).SelectMany(handler => handler.Actions))
@@ -208,11 +219,173 @@ namespace Yuspec.Unity
                     continue;
                 }
 
-                if (!actionRegistry.TryGetAction(action.Name, out _))
+                if (!actionRegistry.TryGetAction(action.Name, out var binding))
                 {
                     diagnostics.Add(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0103", $"Unknown action '{action.Name}'.", string.Empty, action.Line, 1));
+                    continue;
+                }
+
+                if (binding.ParameterTypes.Length != action.Arguments.Count)
+                {
+                    diagnostics.Add(new YuspecDiagnostic(
+                        YuspecDiagnosticSeverity.Error,
+                        "YSP0105",
+                        $"Action '{action.Name}' expects {binding.ParameterTypes.Length} argument(s), got {action.Arguments.Count}.",
+                        string.Empty,
+                        action.Line,
+                        1));
                 }
             }
+        }
+
+        private void ValidateStrictReferences()
+        {
+            if (!strictMode)
+            {
+                return;
+            }
+
+            var declarations = compiledSpecs
+                .SelectMany(spec => spec.Entities)
+                .GroupBy(entity => entity.EntityType, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+            foreach (var handler in compiledSpecs.SelectMany(spec => spec.EventHandlers))
+            {
+                RequireEntityDeclaration(declarations, handler.ActorType, handler.SourceName, handler.Line, "handler actor");
+                if (!string.IsNullOrWhiteSpace(handler.TargetType))
+                {
+                    RequireEntityDeclaration(declarations, handler.TargetType, handler.SourceName, handler.Line, "handler target");
+                }
+
+                ValidateConditionReferences(declarations, handler);
+                foreach (var action in handler.Actions)
+                {
+                    ValidateActionReferences(declarations, handler, action);
+                }
+            }
+        }
+
+        private void ValidateConditionReferences(Dictionary<string, YuspecEntityDeclaration> declarations, YuspecEventHandler handler)
+        {
+            var condition = handler.Condition;
+            if (condition == null || condition.Kind == YuspecConditionKind.None)
+            {
+                return;
+            }
+
+            if (condition.Kind == YuspecConditionKind.HasValue)
+            {
+                RequireEntityDeclaration(declarations, condition.LeftEntity, handler.SourceName, handler.Line, "condition entity");
+                RequireEntityDeclaration(declarations, condition.RightEntity, handler.SourceName, handler.Line, "condition entity");
+                RequirePropertyDeclaration(declarations, condition.RightEntity, condition.RightValue, handler.SourceName, handler.Line);
+                return;
+            }
+
+            if (condition.Kind == YuspecConditionKind.Equals)
+            {
+                RequireEntityDeclaration(declarations, condition.LeftEntity, handler.SourceName, handler.Line, "condition entity");
+                RequirePropertyDeclaration(declarations, condition.LeftEntity, condition.LeftProperty, handler.SourceName, handler.Line);
+                ValidateValueReference(declarations, condition.RightValue, handler.SourceName, handler.Line);
+            }
+        }
+
+        private void ValidateActionReferences(Dictionary<string, YuspecEntityDeclaration> declarations, YuspecEventHandler handler, YuspecActionCall action)
+        {
+            if (action.IsSetAction)
+            {
+                RequireEntityDeclaration(declarations, action.TargetEntity, handler.SourceName, action.Line, "action target");
+                RequirePropertyDeclaration(declarations, action.TargetEntity, action.TargetProperty, handler.SourceName, action.Line);
+                ValidateValueReference(declarations, action.AssignedValue, handler.SourceName, action.Line);
+                return;
+            }
+
+            foreach (var argument in action.Arguments)
+            {
+                ValidateValueReference(declarations, argument, handler.SourceName, action.Line);
+            }
+        }
+
+        private void ValidateValueReference(Dictionary<string, YuspecEntityDeclaration> declarations, string token, string sourceName, int line)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return;
+            }
+
+            var parsed = YuspecSpecParser.ParseLiteral(token);
+            if (!ReferenceEquals(parsed, token))
+            {
+                return;
+            }
+
+            if (token.Contains("."))
+            {
+                var parts = token.Split(new[] { '.' }, 2);
+                RequireEntityDeclaration(declarations, parts[0], sourceName, line, "value entity");
+                RequirePropertyDeclaration(declarations, parts[0], parts[1], sourceName, line);
+                return;
+            }
+
+            if (declarations.ContainsKey(token))
+            {
+                return;
+            }
+        }
+
+        private void RequireEntityDeclaration(
+            Dictionary<string, YuspecEntityDeclaration> declarations,
+            string entityType,
+            string sourceName,
+            int line,
+            string usage)
+        {
+            if (string.IsNullOrWhiteSpace(entityType) || declarations.ContainsKey(entityType))
+            {
+                return;
+            }
+
+            diagnostics.Add(new YuspecDiagnostic(
+                YuspecDiagnosticSeverity.Error,
+                "YSP0110",
+                $"Unknown entity '{entityType}' used as {usage}.",
+                sourceName,
+                line,
+                1));
+        }
+
+        private void RequirePropertyDeclaration(
+            Dictionary<string, YuspecEntityDeclaration> declarations,
+            string entityType,
+            string propertyName,
+            string sourceName,
+            int line)
+        {
+            if (string.IsNullOrWhiteSpace(entityType) || string.IsNullOrWhiteSpace(propertyName))
+            {
+                return;
+            }
+
+            if (!declarations.TryGetValue(entityType, out var declaration))
+            {
+                return;
+            }
+
+            if (declaration.Properties.ContainsKey(propertyName) ||
+                string.Equals(propertyName, "id", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(propertyName, "type", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(propertyName, "state", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            diagnostics.Add(new YuspecDiagnostic(
+                YuspecDiagnosticSeverity.Error,
+                "YSP0111",
+                $"Unknown property '{entityType}.{propertyName}'.",
+                sourceName,
+                line,
+                1));
         }
 
         private void ApplyDeclarationsToRegisteredEntities()
@@ -236,7 +409,17 @@ namespace Yuspec.Unity
 
             foreach (var property in declaration.Properties)
             {
-                if (!entity.TryGetProperty(property.Key, out _))
+                if (string.Equals(property.Key, "state", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (string.IsNullOrEmpty(entity.CurrentState))
+                    {
+                        entity.SetProperty(property.Key, property.Value);
+                    }
+
+                    continue;
+                }
+
+                if (!entity.Properties.ContainsKey(property.Key))
                 {
                     entity.SetProperty(property.Key, property.Value);
                 }
@@ -294,25 +477,25 @@ namespace Yuspec.Unity
             return false;
         }
 
-        private void ExecuteActionCall(YuspecActionCall action, YuspecEntity actor, YuspecEntity target)
+        private void ExecuteActionCall(YuspecActionCall action, YuspecEntity actor, YuspecEntity target, YuspecEventHandler handler)
         {
             if (action.IsSetAction)
             {
                 var targetEntity = ResolveEntity(action.TargetEntity, actor, target);
                 if (targetEntity == null)
                 {
-                    diagnostics.Add(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0400", $"Unknown entity '{action.TargetEntity}' for set action.", string.Empty, action.Line, 1));
+                    AddRuntimeDiagnostic("YSP0400", $"Unknown entity '{action.TargetEntity}' for set action.", handler.SourceName, action.Line);
                     return;
                 }
 
                 var value = ResolveValue(action.AssignedValue, actor, target);
                 targetEntity.SetProperty(action.TargetProperty, value);
-                AddTrace($"action set {targetEntity.EntityId}.{action.TargetProperty} = {value}");
+                AddTrace(YuspecTraceKind.ActionExecuted, $"set {targetEntity.EntityId}.{action.TargetProperty} = {value}", handler.SourceName, action.Line);
                 return;
             }
 
             var args = action.Arguments.Select(argument => ResolveValue(argument, actor, target)).ToArray();
-            AddTrace($"action {action.Name}({string.Join(", ", args.Select(arg => arg?.ToString() ?? "null"))})");
+            AddTrace(YuspecTraceKind.ActionExecuted, $"{action.Name}({string.Join(", ", args.Select(arg => arg?.ToString() ?? "null"))})", handler.SourceName, action.Line);
             ExecuteAction(action.Name, args);
         }
 
@@ -368,13 +551,28 @@ namespace Yuspec.Unity
             return entitiesById.Values.FirstOrDefault(entity => string.Equals(entity.EntityType, reference, StringComparison.OrdinalIgnoreCase));
         }
 
-        private void AddTrace(string message)
+        private void AddTrace(YuspecTraceKind kind, string message, string sourceName = "", int line = 0)
         {
-            debugTrace.Add(message);
+            var time = Application.isPlaying ? Time.time : 0f;
+            var entry = new YuspecTraceEntry(kind, message, sourceName, line, time);
+            traceEntries.Add(entry);
+            debugTrace.Add(entry.ToString());
+            if (traceEntries.Count > maxRecentEvents)
+            {
+                traceEntries.RemoveAt(0);
+            }
+
             if (debugTrace.Count > maxRecentEvents)
             {
                 debugTrace.RemoveAt(0);
             }
+        }
+
+        private void AddRuntimeDiagnostic(string code, string message, string sourceName, int line)
+        {
+            var diagnostic = new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, code, message, sourceName, line, 1);
+            diagnostics.Add(diagnostic);
+            AddTrace(YuspecTraceKind.Diagnostic, diagnostic.ToString(), sourceName, line);
         }
 
         private static string GetSpecText(UnityEngine.Object spec)

@@ -10,8 +10,8 @@ C# MonoBehaviour scripts.
 ![YUSPEC Door demo](docs/assets/yuspec-door-demo-v2.gif)
 
 The current C++ compiler/runtime remains in the repository as the foundation.
-The Unity direction starts with documentation, examples, and a Unity Package
-Manager scaffold while the Unity parser/runtime integration is built in vertical
+The Unity direction starts with a Unity Package Manager package and a real
+Door+Chest runtime slice. The full language is still being built in vertical
 slices.
 
 ## What YUSPEC Is
@@ -221,9 +221,10 @@ files, package docs, and a debugger window under:
 Window > YUSPEC > Debugger
 ```
 
-The scaffold is intentionally honest: it does not pretend the full DSL runtime is
-complete. The Door-style subset now has a minimal Unity parser/runtime slice;
-state machines, scenarios, and the Demo Dungeon remain roadmap work.
+The package is intentionally honest: it does not pretend the full DSL runtime is
+complete. The Door+Chest subset now has a minimal Unity parser/runtime slice;
+state machines, executable scenarios, and the full Demo Dungeon remain roadmap
+work.
 
 ## Unity Dev Environment
 
@@ -239,8 +240,8 @@ It consumes the package from:
 unity/Packages/com.yuspec.unity
 ```
 
-Use it to compile the package, rebuild the Door example scene, and validate the
-runtime slice while developing the language. See
+Use it to compile the package, rebuild the Door+Chest example scene, and
+validate the runtime slice while developing the language. See
 [docs/unity-dev-environment.md](docs/unity-dev-environment.md).
 
 ## Existing C++ Runtime
@@ -255,6 +256,9 @@ The existing C++ implementation is still available:
 See [docs/legacy-examples.md](docs/legacy-examples.md) for how the old examples
 fit into the new Unity-focused product direction.
 
+Early launch positioning and Reddit feedback notes live in
+[docs/reddit-launch.md](docs/reddit-launch.md).
+
 ## Roadmap
 
 Phase 0: Repo pivot
@@ -268,8 +272,8 @@ Phase 2: Action registry
   and unknown action diagnostics.
 
 Phase 3: Minimal parser/runtime for event handlers
-- Door example vertical slice: entity properties, one event handler, one
-  condition, and action execution.
+- Door+Chest vertical slice: entity properties, event handlers, conditions,
+  `set`, C# action execution, strict diagnostics, and debugger trace.
 
 Phase 4: State machines
 - Behavior blocks, state transitions, current state tracking, intervals, and

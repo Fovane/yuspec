@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace Yuspec.Unity
@@ -32,6 +34,29 @@ namespace Yuspec.Unity
 
             // Projects can replace this with their own audio service binding.
             Debug.Log($"YUSPEC play_sound '{soundId}'.");
+        }
+
+        [YuspecAction("give")]
+        public static void Give(YuspecEntity target, string itemId)
+        {
+            if (target == null || string.IsNullOrWhiteSpace(itemId))
+            {
+                return;
+            }
+
+            var inventory = new List<string>();
+            if (target.TryGetProperty("inventory", out var existing) && existing is IEnumerable<string> existingItems)
+            {
+                inventory.AddRange(existingItems);
+            }
+
+            if (!inventory.Any(item => string.Equals(item, itemId, System.StringComparison.OrdinalIgnoreCase)))
+            {
+                inventory.Add(itemId);
+            }
+
+            target.SetProperty("inventory", inventory);
+            Debug.Log($"YUSPEC give '{itemId}' to '{target.EntityId}'.");
         }
     }
 }
