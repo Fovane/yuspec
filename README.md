@@ -7,6 +7,8 @@ entities, events, conditions, actions, state machines, and scenario tests in
 readable `.yuspec` files instead of scattering gameplay logic across hundreds of
 C# MonoBehaviour scripts.
 
+![YUSPEC Door demo](docs/assets/yuspec-door-demo.gif)
+
 The current C++ compiler/runtime remains in the repository as the foundation.
 The Unity direction starts with documentation, examples, and a Unity Package
 Manager scaffold while the Unity parser/runtime integration is built in vertical
