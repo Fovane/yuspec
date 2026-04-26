@@ -33,6 +33,47 @@ YUSPEC is not:
 - A full general-purpose programming language
 - A visual scripting clone
 
+## Current Status
+
+YUSPEC is an early Unity prototype.
+
+Currently working:
+
+- Unity package scaffold
+- Minimal Door+Chest runtime slice
+- Basic entity declarations
+- Basic event handlers
+- Basic condition checks for the current subset
+- Basic C# action binding
+- Runtime diagnostics
+- Prototype debugger window
+
+Planned:
+
+- Full state machine support
+- Scenario test runner
+- Demo Dungeon sample
+- Hot reload
+- Rich type system
+- More complete strict validation
+- Production-ready Unity package release
+
+## Feature Status
+
+| Feature | Status |
+|---|---|
+| Unity package scaffold | Working prototype |
+| Entity declarations | Working subset |
+| Event handlers | Working subset |
+| Conditions | Working subset |
+| C# action binding | Working subset |
+| Debug window | Prototype |
+| Strict diagnostics | Partial |
+| State machines | Planned |
+| Scenario tests | Planned |
+| Demo Dungeon | Planned |
+| Hot reload | Planned |
+
 ## The Problem
 
 Unity projects often grow into many small scripts:
@@ -91,21 +132,54 @@ public void PlayAnimation(YuspecEntity target, string animationName)
 
 Gameplay designers and programmers can then orchestrate those actions in text.
 
-## Door Interaction
+## Verified Vertical Slice: Door + Chest
+
+The current prototype focuses on one small working slice:
+
+- Load a `.yuspec` file in Unity.
+- Register scene entities.
+- Emit `Player.Interact` with a target entity.
+- Evaluate a simple condition.
+- Execute actions such as `set`, `play_animation`, `play_sound`, and `give`.
+- Record diagnostics and debug trace.
+
+See:
+
+`unity/Packages/com.yuspec.unity/Samples~/DoorExample/`
+
+This is the intended manually testable slice for the current prototype.
 
 ```yuspec
+entity Player {
+    inventory = ["IronKey"]
+}
+
 entity Door {
     state = Closed
     key = "IronKey"
+}
+
+entity Chest {
+    state = Closed
+    reward = "Gold"
 }
 
 on Player.Interact with Door when Player.has(Door.key):
     set Door.state = Open
     play_animation Door "Open"
     play_sound "door_open"
+
+on Player.Interact with Chest when Chest.state == Closed:
+    set Chest.state = Open
+    give Player Chest.reward
+    play_sound "chest_open"
 ```
 
-## Goblin AI
+## Planned Syntax Direction
+
+The following examples show where the language is going. They are not fully implemented in the current prototype.
+
+### Goblin AI
 
 ```yuspec
 entity Goblin {
@@ -143,7 +217,7 @@ behavior GoblinAI for Goblin {
 }
 ```
 
-## Scenario Test
+### Scenario Tests
 
 ```yuspec
 scenario "door opens with key" {
@@ -153,7 +227,7 @@ scenario "door opens with key" {
 }
 ```
 
-## Boss Room Orchestration
+### Boss Room Orchestration
 
 ```yuspec
 on Player.EnterZone("BossRoom"):
@@ -172,21 +246,30 @@ on Boss.Died:
 
 ## Strict Mode
 
-Unity usage should default to strict validation. Silent typo-based failure is a
-product bug, not a feature.
+Unity usage should default to strict validation. Silent typo-based failure is a product bug, not a feature.
 
-Planned strict mode diagnostics include:
+Implemented now:
 
-- Unknown action
-- Unknown entity
-- Unknown property
-- Wrong argument count
+- Empty action name
+- Duplicate action binding name
+- Unknown action during direct runtime execution
+- Unknown action while loading specs
+- Wrong action argument count while loading specs
+- Unknown entity in handler, condition, action, or value reference
+- Unknown property in condition, set action, or value reference
+- Empty event name
+- Duplicate entity id in the scene
+
+Planned:
+
 - Wrong argument type
 - Duplicate state
 - Duplicate event handler
 - Unreachable state
 - Unknown transition target
 - Typo-based null fallback
+
+See [docs/strict-mode.md](docs/strict-mode.md) for the current split between implemented and planned diagnostics.
 
 ## Visual Debugging Goal
 
@@ -221,10 +304,7 @@ files, package docs, and a debugger window under:
 Window > YUSPEC > Debugger
 ```
 
-The package is intentionally honest: it does not pretend the full DSL runtime is
-complete. The Door+Chest subset now has a minimal Unity parser/runtime slice;
-state machines, executable scenarios, and the full Demo Dungeon remain roadmap
-work.
+The package is intentionally honest: it does not pretend the full DSL runtime is complete. The Door+Chest subset now has a minimal Unity parser/runtime slice; state machines, executable scenarios, and the full Demo Dungeon remain roadmap work.
 
 ## Unity Dev Environment
 

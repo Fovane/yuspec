@@ -1,3 +1,7 @@
+# Planned syntax example.
+# This file documents the intended language direction.
+# It is not fully supported by the current runtime yet.
+
 entity Goblin {
     health = 30
     damage = 5

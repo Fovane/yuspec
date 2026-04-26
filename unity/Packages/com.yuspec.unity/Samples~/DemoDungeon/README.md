@@ -1,7 +1,6 @@
 # Demo Dungeon
 
-This sample is the product demo target. It is intentionally broader than the
-first implementation slice.
+This is a planned roadmap example, not a supported runtime slice.
 
 It demonstrates:
 
@@ -15,5 +14,4 @@ It demonstrates:
 - Boss phase transition
 - Boss death exit unlock
 
-Current status: design sample. The intended implementation path is Door first,
-then state machines, then the full dungeon.
+Current status: roadmap example. The intended implementation path is Door first, then state machines, then the full dungeon.

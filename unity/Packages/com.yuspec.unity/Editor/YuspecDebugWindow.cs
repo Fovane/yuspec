@@ -157,21 +157,21 @@ namespace Yuspec.Unity.Editor
 
         private static void DrawPlaceholderSections()
         {
-            DrawSection("Loaded Specs");
+            DrawSection("Loaded Specs (Planned)");
             EditorGUILayout.LabelField("Waiting for a YuspecRuntime.");
-            DrawSection("Diagnostics");
+            DrawSection("Diagnostics (Planned)");
             EditorGUILayout.LabelField("No runtime diagnostics.");
-            DrawSection("Registered Actions");
+            DrawSection("Registered Actions (Planned)");
             EditorGUILayout.LabelField("No runtime action registry.");
-            DrawSection("Parsed Handlers");
+            DrawSection("Parsed Handlers (Planned)");
             EditorGUILayout.LabelField("No parsed handlers.");
-            DrawSection("Scene Entities");
+            DrawSection("Scene Entities (Planned)");
             EditorGUILayout.LabelField("No scene entities.");
-            DrawSection("Recent Events");
+            DrawSection("Recent Events (Planned)");
             EditorGUILayout.LabelField("No events.");
-            DrawSection("Debug Trace");
+            DrawSection("Debug Trace (Planned)");
             EditorGUILayout.LabelField("No trace.");
-            DrawSection("Current States");
+            DrawSection("Current States (Not implemented yet)");
             EditorGUILayout.LabelField("No states.");
         }
 

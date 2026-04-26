@@ -1,33 +1,11 @@
 # Strict Mode
 
-Strict mode is the default target for Unity. A gameplay DSL that silently ignores
-typos is not useful in real projects.
+Strict mode is the default target for Unity. A gameplay DSL that silently ignores typos is not useful in real projects.
 
-Planned diagnostics:
+## Implemented in the current prototype
 
-- Unknown entity
-- Unknown action
-- Unknown property
-- Wrong argument count
-- Wrong argument type
-- Duplicate state
-- Duplicate event handler
-- Unreachable state
-- Unknown transition target
-- Missing action binding
-- Condition always false where detectable
-- Typo-based null fallback
-- Duplicate entity id in the scene
-- Empty event name
-- Null action target
-
-## Initial Scaffold Coverage
-
-The Unity runtime can already report these runtime and source-level problems for
-the implemented event-handler subset:
-
-- Duplicate action binding name
 - Empty action name
+- Duplicate action binding name
 - Unknown action during direct runtime execution
 - Unknown action while loading specs
 - Wrong action argument count while loading specs
@@ -35,9 +13,22 @@ the implemented event-handler subset:
 - Unknown property in condition, set action, or value reference
 - Empty event name
 - Duplicate entity id in the scene
+- Unsupported condition syntax, which fails closed with a warning
 
-The parser and semantic validator will expand this into source-level diagnostics
-with file, line, and column.
+## Planned strict diagnostics
+
+- Unknown entity in broader language constructs
+- Unknown action in all future parser surfaces
+- Unknown property in all future parser surfaces
+- Wrong argument type
+- Duplicate state
+- Duplicate event handler
+- Unreachable state
+- Unknown transition target
+- Missing action binding in future runtime slices
+- Condition always false where detectable
+- Typo-based null fallback
+- Null action target
 
 ## Error Shape
 
@@ -50,5 +41,4 @@ Diagnostics should carry:
 - Line
 - Column
 
-This lets the CLI, Unity console, debugger window, and future language server
-show the same error model.
+This lets the CLI, Unity console, debugger window, and future language server show the same error model.

@@ -1,6 +1,6 @@
 # Goblin AI
 
-This sample shows the intended state machine syntax for a simple enemy.
+This is a planned syntax example, not a supported runtime slice.
 
 It demonstrates:
 
@@ -10,5 +10,4 @@ It demonstrates:
 - Repeated `every` actions
 - State entry actions through `do`
 
-Current status: design sample. State machines are planned after the Door vertical
-slice.
+Current status: roadmap example. State machines are planned after the Door vertical slice.

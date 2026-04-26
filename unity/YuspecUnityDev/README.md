@@ -17,7 +17,8 @@ The project consumes the package from:
 ## Open
 
 ```powershell
-& "C:\Program Files\Unity\Hub\Editor\6000.3.8f1\Editor\Unity.exe" -projectPath "C:\Users\yucel\OneDrive\LaptopDesktop\Yuspec Projesi\Main\unity\YuspecUnityDev"
+$UNITY_EDITOR = "<path-to-Unity.exe>"
+& $UNITY_EDITOR -projectPath "<repo-root>\unity\YuspecUnityDev"
 ```
 
 ## Rebuild The Door+Chest Scene
@@ -31,7 +32,7 @@ YUSPEC > Dev > Rebuild Door Example Scene
 Or from PowerShell:
 
 ```powershell
-& "C:\Program Files\Unity\Hub\Editor\6000.3.8f1\Editor\Unity.exe" -batchmode -quit -projectPath "C:\Users\yucel\OneDrive\LaptopDesktop\Yuspec Projesi\Main\unity\YuspecUnityDev" -executeMethod Yuspec.Dev.Editor.YuspecDevSceneBuilder.RebuildDoorExampleSceneBatch -logFile "C:\Users\yucel\OneDrive\LaptopDesktop\Yuspec Projesi\Main\unity\YuspecUnityDev-rebuild.log"
+& $UNITY_EDITOR -batchmode -quit -projectPath "<repo-root>\unity\YuspecUnityDev" -executeMethod Yuspec.Dev.Editor.YuspecDevSceneBuilder.RebuildDoorExampleSceneBatch -logFile "<repo-root>\unity\YuspecUnityDev-rebuild.log"
 ```
 
 ## Door+Chest Runtime Slice
@@ -57,13 +58,13 @@ Expected result:
 ## Batch Validation
 
 ```powershell
-& "C:\Program Files\Unity\Hub\Editor\6000.3.8f1\Editor\Unity.exe" -batchmode -quit -projectPath "C:\Users\yucel\OneDrive\LaptopDesktop\Yuspec Projesi\Main\unity\YuspecUnityDev" -executeMethod Yuspec.Dev.Editor.YuspecDevSceneBuilder.ValidateDoorExampleRuntimeBatch -logFile "C:\Users\yucel\OneDrive\LaptopDesktop\Yuspec Projesi\Main\unity\YuspecUnityDev-validate.log"
+& $UNITY_EDITOR -batchmode -quit -projectPath "<repo-root>\unity\YuspecUnityDev" -executeMethod Yuspec.Dev.Editor.YuspecDevSceneBuilder.ValidateDoorExampleRuntimeBatch -logFile "<repo-root>\unity\YuspecUnityDev-validate.log"
 ```
 
 For CI-style rebuild plus validation in one pass:
 
 ```powershell
-& "C:\Program Files\Unity\Hub\Editor\6000.3.8f1\Editor\Unity.exe" -batchmode -quit -projectPath "C:\Users\yucel\OneDrive\LaptopDesktop\Yuspec Projesi\Main\unity\YuspecUnityDev" -executeMethod Yuspec.Dev.Editor.YuspecDevSceneBuilder.RebuildAndValidateDoorExampleSceneBatch -logFile "C:\Users\yucel\OneDrive\LaptopDesktop\Yuspec Projesi\Main\unity\YuspecUnityDev-rebuild-validate.log"
+& $UNITY_EDITOR -batchmode -quit -projectPath "<repo-root>\unity\YuspecUnityDev" -executeMethod Yuspec.Dev.Editor.YuspecDevSceneBuilder.RebuildAndValidateDoorExampleSceneBatch -logFile "<repo-root>\unity\YuspecUnityDev-rebuild-validate.log"
 ```
 
 Expected log line:

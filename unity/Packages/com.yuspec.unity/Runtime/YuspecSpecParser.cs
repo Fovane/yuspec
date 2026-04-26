@@ -200,9 +200,22 @@ namespace Yuspec.Unity
         public static object ParseLiteral(string text)
         {
             text = text.Trim();
-            if (text == "[]")
+            if (text.StartsWith("[", StringComparison.Ordinal) && text.EndsWith("]", StringComparison.Ordinal))
             {
-                return new List<string>();
+                var inner = text.Substring(1, text.Length - 2).Trim();
+                var items = new List<string>();
+                if (string.IsNullOrWhiteSpace(inner))
+                {
+                    return items;
+                }
+
+                foreach (var item in SplitListItems(inner))
+                {
+                    var parsedItem = ParseLiteral(item);
+                    items.Add(parsedItem?.ToString() ?? string.Empty);
+                }
+
+                return items;
             }
 
             if (text.Length >= 2 && text[0] == '"' && text[text.Length - 1] == '"')
@@ -255,6 +268,35 @@ namespace Yuspec.Unity
 
             AddToken(tokens, builder);
             return tokens;
+        }
+
+        private static List<string> SplitListItems(string text)
+        {
+            var items = new List<string>();
+            var builder = new StringBuilder();
+            var inString = false;
+
+            for (var i = 0; i < text.Length; i++)
+            {
+                var character = text[i];
+                if (character == '"')
+                {
+                    inString = !inString;
+                    builder.Append(character);
+                    continue;
+                }
+
+                if (character == ',' && !inString)
+                {
+                    AddToken(items, builder);
+                    continue;
+                }
+
+                builder.Append(character);
+            }
+
+            AddToken(items, builder);
+            return items;
         }
 
         private static void AddToken(List<string> tokens, StringBuilder builder)

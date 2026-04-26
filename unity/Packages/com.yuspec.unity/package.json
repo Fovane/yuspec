@@ -20,16 +20,6 @@
       "displayName": "Door Example",
       "description": "Minimal locked-door gameplay rule sample.",
       "path": "Samples~/DoorExample"
-    },
-    {
-      "displayName": "Goblin AI",
-      "description": "Text-based state machine sample.",
-      "path": "Samples~/GoblinAI"
-    },
-    {
-      "displayName": "Demo Dungeon",
-      "description": "Multi-system gameplay orchestration sample.",
-      "path": "Samples~/DemoDungeon"
     }
   ]
 }
