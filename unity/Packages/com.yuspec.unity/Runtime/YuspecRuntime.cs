@@ -29,7 +29,15 @@ namespace Yuspec.Unity
 
         private void Awake()
         {
+            Initialize();
+        }
+
+        public void Initialize()
+        {
             actionRegistry.Clear();
+            diagnostics.Clear();
+            recentEvents.Clear();
+            debugTrace.Clear();
             actionRegistry.RegisterFromLoadedAssemblies();
             diagnostics.AddRange(actionRegistry.Diagnostics);
             LoadSpecs();

@@ -58,3 +58,20 @@ desktop.ini
 
 # ─── YUSPEC specific ─────────────────────────────────────────────
 # Keep all .yus source files — never ignore them
+# Unity generated project data
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+MemoryCaptures/
+Recordings/
+*.csproj
+*.sln
+*.pidb
+*.booproj
+*.svd
+*.unitypackage
+*.app

@@ -223,6 +223,24 @@ The scaffold is intentionally honest: it does not pretend the full DSL runtime i
 complete. The Door-style subset now has a minimal Unity parser/runtime slice;
 state machines, scenarios, and the Demo Dungeon remain roadmap work.
 
+## Unity Dev Environment
+
+The repository includes a Unity 6000.3.8f1 development project at:
+
+```text
+unity/YuspecUnityDev
+```
+
+It consumes the package from:
+
+```text
+unity/Packages/com.yuspec.unity
+```
+
+Use it to compile the package, rebuild the Door example scene, and validate the
+runtime slice while developing the language. See
+[docs/unity-dev-environment.md](docs/unity-dev-environment.md).
+
 ## Existing C++ Runtime
 
 The existing C++ implementation is still available:
