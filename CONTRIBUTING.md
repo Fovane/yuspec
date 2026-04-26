@@ -1,96 +1,87 @@
 # Contributing to YUSPEC
 
-Thank you for your interest in contributing! YUSPEC is an open-source
-Entity-Behavior Programming language — every kind of contribution is welcome.
+Thanks for helping improve YUSPEC.
 
----
+This repository currently focuses on the Unity package under
+`unity/Packages/com.yuspec.unity`, plus the top-level docs and sample files that
+describe the current prototype honestly.
 
-## Ways to Contribute
+## What to Contribute
 
-| Type | How |
-|------|-----|
-| Bug reports | Open a GitHub issue using the bug report template |
-| Feature requests | Open a GitHub issue using the feature request template |
-| Fix a bug | Fork → branch → fix → PR |
-| New example | Add a `.yus` file to `examples/<domain>/` |
-| Documentation | Edit `README.md`, `docs/`, or code comments |
-| Language design | Open a Discussion with proposal + rationale |
-| Bindings / tooling | VS Code extension, playground, LSP |
+- Bug fixes in the Unity package runtime or editor code
+- Documentation corrections in `README.md`, `docs/`, or package docs
+- Sample `.yuspec` files that better match the current parser
+- Small parser/runtime improvements that preserve current behavior
+- Debugger or diagnostics polish
+- Tests, validation steps, or reproducible repro cases
 
----
+## Before You Open a PR
 
-## Getting Started
+Please keep changes focused.
 
-### Prerequisites
+- Do not add large new features unless they are explicitly requested
+- Do not rewrite architecture just to make a sample work
+- Prefer the smallest change that fixes the issue
+- Keep docs honest about what is implemented versus planned
 
-- CMake 3.16+
-- C++17 compiler: MSVC 2019+, GCC 9+, or Clang 10+
-- Git
+## Good Places to Edit
 
-### Build from Source
+- `README.md`
+- `docs/`
+- `unity/Packages/com.yuspec.unity/Runtime/`
+- `unity/Packages/com.yuspec.unity/Editor/`
+- `unity/Packages/com.yuspec.unity/Samples~/`
 
-```bash
-git clone https://github.com/<your-username>/yuspec.git
-cd yuspec
+## Local Checks
 
-cmake -S . -B build
-cmake --build build --target yuspec1
+If you change runtime or editor code, verify the relevant files still compile in
+Unity and that the sample behavior still matches the docs.
 
-# Run the test suite
-./build/Debug/yuspec1 test examples/testing/01_scenario.yus
-./build/Debug/yuspec1 test examples/game/01_mmo.yus
-```
+If you change docs or sample files, make sure the raw files are readable in the
+repository and not compressed into single-line blobs.
 
-All tests must pass (34/34 + 11/11) before submitting a PR.
+Useful checks:
 
----
+1. Open the changed `.cs` files and confirm they are normal multi-line source
+	files.
+2. Check the sample `.yuspec` files against the current parser rules.
+3. Run the narrowest Unity validation or editor check that covers the change.
 
-## Branch Naming
+## Style Guidance
 
-```
-feature/<short-description>   # new features
-fix/<short-description>       # bug fixes
-docs/<short-description>      # documentation only
-example/<domain-name>         # new .yus example
-```
+- Use one `using` per line in C# files
+- Keep namespace, class, and method indentation conventional
+- Keep Markdown readable with real headings, lists, and fenced blocks
+- Keep `.json` files pretty-printed with stable indentation
+- Keep `.yuspec` samples aligned with the currently supported syntax
 
----
+## Pull Requests
 
-## Coding Style
+When you open a PR, include:
 
-- C++17, no external dependencies for compiler/runtime
-- `snake_case` for variables/functions, `PascalCase` for classes
-- Every class has a `reset()` method (scenario isolation requirement)
-- Public API changes must be reflected in `CHANGELOG.md`
-- New language features need at least one `examples/` file demonstrating them
+- A short summary of what changed
+- The reason for the change
+- Any validation you ran
+- Any known limitations that remain
 
----
+PRs are easiest to review when they do one thing well.
 
-## Pull Request Checklist
+## Reporting Bugs
 
-- [ ] All existing tests still pass
-- [ ] New feature has at least one `.yus` example or test scenario
-- [ ] `CHANGELOG.md` updated
-- [ ] Code follows existing style (no trailing whitespace, Unix line endings)
-- [ ] No new compiler warnings introduced
+If you find a bug, include:
 
----
+- The file or feature involved
+- What you expected to happen
+- What actually happened
+- A minimal reproduction if possible
+- Any relevant console output or parser diagnostics
 
-## Adding a New Domain Example
+## Security Issues
 
-1. Create `examples/<domain>/<NN>_<description>.yus`
-2. Make sure it passes `yuspec1 test examples/<domain>/<file>.yus`
-3. Add domain to the examples table in `README.md`
+Please do not file security vulnerabilities as public issues. Contact the
+repository owner privately instead.
 
----
+## Questions
 
-## Reporting Security Issues
-
-Please **do not** file a public issue for security vulnerabilities.  
-Email: yucelsabah00@outlook.com
-
----
-
-## Code of Conduct
-
-Be kind, be constructive, be patient. We are all here to build something cool.
+If something is unclear, open an issue or discussion with the smallest possible
+example. A short repro is usually more useful than a long description.
