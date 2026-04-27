@@ -13,12 +13,12 @@ namespace Yuspec.Unity.Tests
         {
             const string source = @"
 entity Player {
-    inventory = [\"IronKey\"]
+    inventory = [""IronKey""]
 }
 
 entity Door {
     state = Closed
-    key = \"IronKey\"
+    key = ""IronKey""
 }
 
 on Player.Interact with Door when Player.has(Door.key):
@@ -103,14 +103,14 @@ entity Player {
 
 entity Door {
     state = Closed
-    key = \"IronKey\"
+    key = ""IronKey""
 }
 
 on Player.Interact with Door when Player.has(Door.key):
     set Door.state = Open
 
-scenario \"door opens with key\" {
-    given Player has \"IronKey\"
+scenario ""door opens with key"" {
+    given Player has ""IronKey""
     when Player.Interact Door
     expect Door.state == Open
 }

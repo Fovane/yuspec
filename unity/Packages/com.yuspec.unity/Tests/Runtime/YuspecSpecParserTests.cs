@@ -11,12 +11,12 @@ namespace Yuspec.Unity.Tests
             const string source = @"
 entity Door {
     state = Closed
-    key = \"IronKey\"
+    key = ""IronKey""
 }
 
 on Player.Interact with Door when Player.has(Door.key):
     set Door.state = Open
-    play_sound \"door_open\"
+    play_sound ""door_open""
 ";
 
             var parser = new YuspecSpecParser();
@@ -39,7 +39,7 @@ on Player.Interact with Door when Player.has(Door.key):
 behavior GoblinAI for Goblin {
     state Idle {
         on enter:
-            play_animation self \"Idle\"
+            play_animation self ""Idle""
 
         on PlayerSeen -> Chase
     }
@@ -72,8 +72,8 @@ behavior GoblinAI for Goblin {
         public void Parse_ScenarioBlock_BuildsScenarioSyntax()
         {
             const string source = @"
-scenario \"door opens with key\" {
-    given Player has \"IronKey\"
+scenario ""door opens with key"" {
+    given Player has ""IronKey""
     when Player.Interact Door
     expect Door.state == Open
 }
@@ -96,7 +96,7 @@ scenario \"door opens with key\" {
             const string source = @"
 # full-line comment
 entity Door {
-    key = \"Iron#Key\" # inline hash comment
+    key = ""Iron#Key"" # inline hash comment
     state = Closed // inline slash comment
 }
 ";

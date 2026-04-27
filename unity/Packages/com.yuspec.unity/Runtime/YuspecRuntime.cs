@@ -317,7 +317,7 @@ namespace Yuspec.Unity
 
                 for (var index = 0; index < action.Arguments.Count; index++)
                 {
-                    var inferred = ResolvePotentialType(action.Arguments[index]);
+                    var inferred = ResolvePotentialLiteralType(action.Arguments[index]);
                     if (inferred == null)
                     {
                         continue;
@@ -742,8 +742,12 @@ namespace Yuspec.Unity
                 return false;
             }
 
-            return string.IsNullOrWhiteSpace(handler.TargetType) ||
-                   target == null ||
+            if (string.IsNullOrWhiteSpace(handler.TargetType))
+            {
+                return true;
+            }
+
+            return target != null &&
                    string.Equals(target.EntityType, handler.TargetType, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -866,10 +870,21 @@ namespace Yuspec.Unity
             return entitiesById.Values.FirstOrDefault(entity => string.Equals(entity.EntityType, reference, StringComparison.OrdinalIgnoreCase));
         }
 
-        private static Type ResolvePotentialType(string token)
+        private static Type ResolvePotentialLiteralType(string token)
         {
-            var value = YuspecSpecParser.ParseLiteral(token);
-            return value?.GetType();
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return null;
+            }
+
+            var trimmed = token.Trim();
+            if (trimmed.Contains(".") || Regex.IsMatch(trimmed, @"^[A-Za-z_][A-Za-z0-9_]*$"))
+            {
+                return null;
+            }
+
+            var value = YuspecSpecParser.ParseLiteral(trimmed);
+            return ReferenceEquals(value, trimmed) ? null : value?.GetType();
         }
 
         private static bool IsTypeCompatible(Type expectedType, Type actualType)

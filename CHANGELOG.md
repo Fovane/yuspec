@@ -1,5 +1,26 @@
 # Changelog
 
+## [Unity 1.0.0] - 2026-04-27
+
+### Added
+- Unity Package Manager package at `unity/Packages/com.yuspec.unity`.
+- Unity runtime for entity declarations, event handlers, conditions, action calls,
+  state machines, and scenario checks.
+- Editor debugger for specs, diagnostics, entities, events, actions, states, and
+  scenarios.
+- Door+Chest, GoblinAI, Quest, BossPhase, and DemoDungeon samples.
+- Unity 6000.3.8f1 dev project and validation harness.
+
+### Changed
+- Repositioned the repository around Unity gameplay rule orchestration.
+- Updated README, docs, roadmap, and launch notes for the Unity v1.0 package.
+- Kept the original C++ implementation as the legacy/general DSL foundation.
+
+### Validated
+- C++ build passes with `cmake --build build --config Debug`.
+- Unity EditMode package tests pass: 10/10.
+- Unity Door+Chest scene validation passes.
+
 All notable changes to YUSPEC are documented in this file.  
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 

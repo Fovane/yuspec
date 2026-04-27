@@ -2,13 +2,17 @@
 
 ## Phase 0 - Repo Pivot
 
-- Rewrite README around Unity gameplay orchestration.
-- Add product docs.
-- Add Unity examples.
-- Add Unity package scaffold.
-- Mark old general examples as legacy.
+Status: done.
+
+- README rewritten around Unity gameplay orchestration.
+- Product docs added.
+- Unity examples added.
+- Unity package scaffold added.
+- Old general examples marked as legacy.
 
 ## Phase 1 - Unity Package Scaffold
+
+Status: done.
 
 - `com.yuspec.unity` package manifest.
 - Runtime and editor asmdefs.
@@ -22,6 +26,8 @@ appears without compile errors.
 
 ## Phase 2 - Action Registry
 
+Status: done.
+
 - Reflection-based method discovery.
 - Duplicate binding diagnostics.
 - Argument count validation.
@@ -32,6 +38,8 @@ Success criterion: `[YuspecAction("play_sound")]` methods can be discovered and
 called by name.
 
 ## Phase 3 - Minimal Runtime
+
+Status: done.
 
 - Door+Chest example syntax.
 - Minimal line-oriented Unity parser for the Door subset.
@@ -51,6 +59,8 @@ Current status: implemented in the Unity package scaffold and dev scene harness.
 
 ## Phase 4 - State Machines
 
+Status: done for the v1 subset.
+
 - `behavior` block.
 - `state` block.
 - `on event -> state`.
@@ -62,15 +72,18 @@ Success criterion: Goblin can move through Idle, Chase, Attack, and Dead states.
 
 ## Phase 5 - Scenario Tests
 
+Status: done for the v1 Unity subset.
+
 - `scenario` parser.
 - `given` / `when` / `expect`.
-- CLI test runner.
-- Unity editor scenario runner.
+- Unity runtime/editor scenario runner.
 - Debugger result view.
 
 Success criterion: `scenario "door opens with key"` reports pass/fail.
 
 ## Phase 6 - Demo Dungeon
+
+Status: done as a package sample.
 
 - Player picks up key.
 - Locked door opens with key.
@@ -85,13 +98,23 @@ Success criterion: a 60 second demo shows why YUSPEC reduces script sprawl.
 
 ## Phase 7 - Publish Readiness
 
+Status: in progress.
+
 - Versioned package manifest.
 - CHANGELOG.
 - LICENSE.
 - Samples.
 - Tests.
 - Documentation.
-- CI.
-- Release zip.
-- Demo video.
+- Local C++ and Unity validation.
+- Release tag.
+- Demo GIF.
 - Asset Store description.
+
+Remaining post-v1 work:
+
+- CI automation.
+- Hot reload.
+- Richer type inference.
+- More production-oriented Unity service bindings.
+- Asset Store submission packaging.

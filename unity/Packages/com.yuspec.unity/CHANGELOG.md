@@ -10,4 +10,6 @@ All notable changes to this package are documented in this file.
 - Added runtime state machine execution and scenario runner.
 - Added debugger tabs for overview, specs, diagnostics, entities, events, actions, state machines, scenarios, and settings.
 - Added runtime and editor test assemblies and baseline tests.
-- Updated Door, GoblinAI, and DemoDungeon samples for supported v1 syntax.
+- Added common bridge action stubs for Demo Dungeon flows.
+- Updated Door, GoblinAI, Quest, BossPhase, and DemoDungeon samples for supported v1 syntax.
+- Validated the Unity package with Unity 6000.3.8f1 EditMode tests and Door+Chest scene validation.

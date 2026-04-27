@@ -2,30 +2,29 @@
 
 Strict mode is the default target for Unity. A gameplay DSL that silently ignores typos is not useful in real projects.
 
-## Implemented in the current prototype
+## Implemented in v1.0
 
 - Empty action name
 - Duplicate action binding name
 - Unknown action during direct runtime execution
 - Unknown action while loading specs
 - Wrong action argument count while loading specs
+- Wrong literal argument type where the runtime can infer it safely
 - Unknown entity in handler, condition, action, or value reference
 - Unknown property in condition, set action, or value reference
 - Empty event name
 - Duplicate entity id in the scene
 - Unsupported condition syntax, which fails closed with a warning
-
-## Planned strict diagnostics
-
-- Unknown entity in broader language constructs
-- Unknown action in all future parser surfaces
-- Unknown property in all future parser surfaces
-- Wrong argument type
 - Duplicate state
 - Duplicate event handler
 - Unreachable state
 - Unknown transition target
-- Missing action binding in future runtime slices
+- Invalid state machine interval
+- Missing entity declarations for behavior and scenario surfaces
+
+## Planned strict diagnostics
+
+- Richer argument type checking for entity references and project-defined action arguments
 - Condition always false where detectable
 - Typo-based null fallback
 - Null action target

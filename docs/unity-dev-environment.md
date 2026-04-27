@@ -66,6 +66,21 @@ Expected result:
 YUSPEC Door+Chest runtime validation passed: Door.state == Open, Chest.state == Open, Player has Gold.
 ```
 
+## Run Package Tests
+
+The dev project enables `com.unity.test-framework` and marks
+`com.yuspec.unity` as testable.
+
+```powershell
+& $UNITY_EDITOR -batchmode -projectPath "<repo-root>\unity\YuspecUnityDev" -runTests -testPlatform editmode -testResults "<repo-root>\unity\YuspecUnityDev-editmode-results.xml" -logFile "<repo-root>\unity\YuspecUnityDev-editmode.log"
+```
+
+Expected v1.0 result:
+
+```text
+testcasecount="10" result="Passed" total="10" passed="10"
+```
+
 ## Manual Debugging
 
 Open:

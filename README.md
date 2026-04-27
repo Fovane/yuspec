@@ -10,9 +10,8 @@ C# MonoBehaviour scripts.
 ![YUSPEC Door demo](docs/assets/yuspec-door-demo-v2.gif)
 
 The current C++ compiler/runtime remains in the repository as the foundation.
-The Unity direction starts with a Unity Package Manager package and a real
-Door+Chest runtime slice. The full language is still being built in vertical
-slices.
+The Unity package now targets a v1.0 vertical slice: events, conditions, action
+binding, state machines, scenarios, debugger trace, and a Demo Dungeon sample.
 
 ## What YUSPEC Is
 
@@ -35,43 +34,43 @@ YUSPEC is not:
 
 ## Current Status
 
-YUSPEC is an early Unity prototype.
+YUSPEC v1.0 is a Unity Package Manager package candidate.
 
 Currently working:
 
-- Unity package scaffold
-- Minimal Door+Chest runtime slice
-- Basic entity declarations
-- Basic event handlers
-- Basic condition checks for the current subset
-- Basic C# action binding
-- Runtime diagnostics
-- Prototype debugger window
+- Unity package scaffold with runtime, editor, samples, docs, and tests
+- Entity declarations and property bags
+- Event handlers with optional `with` target and `when` condition
+- Conditions for inventory-style `has`, equality, and state transitions
+- C# action binding through `[YuspecAction]`
+- Built-in `set` plus common Unity-facing action stubs
+- Behavior/state machine blocks with transitions, enter/exit/do actions, and `every` intervals
+- Scenario tests with `given` / `when` / `expect`
+- Runtime diagnostics and debugger trace
+- Door+Chest and Demo Dungeon samples
 
-Planned:
+Still intentionally limited:
 
-- Full state machine support
-- Scenario test runner
-- Demo Dungeon sample
-- Hot reload
-- Rich type system
-- More complete strict validation
-- Production-ready Unity package release
+- No visual graph editor
+- No networking or replication layer
+- No full general-purpose programming model
+- No hot reload guarantee yet
+- Project-specific actions should still be implemented in C# for real games
 
 ## Feature Status
 
 | Feature | Status |
 |---|---|
-| Unity package scaffold | Working prototype |
+| Unity package scaffold | v1.0 candidate |
 | Entity declarations | Working subset |
 | Event handlers | Working subset |
 | Conditions | Working subset |
 | C# action binding | Working subset |
-| Debug window | Prototype |
-| Strict diagnostics | Partial |
-| State machines | Planned |
-| Scenario tests | Planned |
-| Demo Dungeon | Planned |
+| Debug window | Working subset |
+| Strict diagnostics | Working subset |
+| State machines | Working subset |
+| Scenario tests | Working subset |
+| Demo Dungeon | Working sample |
 | Hot reload | Planned |
 
 ## The Problem
@@ -134,7 +133,7 @@ Gameplay designers and programmers can then orchestrate those actions in text.
 
 ## Verified Vertical Slice: Door + Chest
 
-The current prototype focuses on one small working slice:
+The core working slice is intentionally concrete:
 
 - Load a `.yuspec` file in Unity.
 - Register scene entities.
@@ -147,7 +146,7 @@ See:
 
 `unity/Packages/com.yuspec.unity/Samples~/DoorExample/`
 
-This is the intended manually testable slice for the current prototype.
+This is the intended manually testable slice for the v1.0 package.
 
 ```yuspec
 entity Player {
@@ -175,9 +174,10 @@ on Player.Interact with Chest when Chest.state == Closed:
     play_sound "chest_open"
 ```
 
-## Planned Syntax Direction
+## Supported v1 Syntax Examples
 
-The following examples show where the language is going. They are not fully implemented in the current prototype.
+The following examples show the supported v1 subset. The language remains small
+on purpose; C# actions still carry the technical Unity implementation.
 
 ### Goblin AI
 
@@ -230,17 +230,16 @@ scenario "door opens with key" {
 ### Boss Room Orchestration
 
 ```yuspec
-on Player.EnterZone("BossRoom"):
-    lock Door.BossRoom
-    spawn Boss at BossSpawnPoint
+on Player.EnterBossRoom with BossRoom:
+    set BossRoom.state = Open
     play_music "boss_theme"
 
-on Boss.HealthBelow(50%):
+on Boss.HealthBelow:
     set_state Boss Phase2
     play_cutscene "BossPhase2Intro"
 
 on Boss.Died:
-    unlock Door.Exit
+    set ExitDoor.state = Open
     give Player "AncientKey"
 ```
 
@@ -255,25 +254,26 @@ Implemented now:
 - Unknown action during direct runtime execution
 - Unknown action while loading specs
 - Wrong action argument count while loading specs
+- Wrong argument type where literals can be checked safely
 - Unknown entity in handler, condition, action, or value reference
 - Unknown property in condition, set action, or value reference
 - Empty event name
 - Duplicate entity id in the scene
-
-Planned:
-
-- Wrong argument type
 - Duplicate state
 - Duplicate event handler
 - Unreachable state
 - Unknown transition target
+
+Planned:
+
 - Typo-based null fallback
+- Richer type inference for entity references and project-specific action args
 
 See [docs/strict-mode.md](docs/strict-mode.md) for the current split between implemented and planned diagnostics.
 
-## Visual Debugging Goal
+## Visual Debugging
 
-The YUSPEC Debugger should show:
+The YUSPEC Debugger shows the runtime surface needed for v1.0 iteration:
 
 - Loaded specs
 - Parse errors
@@ -304,7 +304,9 @@ files, package docs, and a debugger window under:
 Window > YUSPEC > Debugger
 ```
 
-The package is intentionally honest: it does not pretend the full DSL runtime is complete. The Door+Chest subset now has a minimal Unity parser/runtime slice; state machines, executable scenarios, and the full Demo Dungeon remain roadmap work.
+The package is intentionally honest: v1.0 is a focused Unity gameplay rule
+layer, not a replacement for Unity or C#. The shipped samples exercise events,
+actions, conditions, state machines, scenarios, and debugger trace.
 
 ## Unity Dev Environment
 
@@ -342,32 +344,32 @@ Early launch positioning and Reddit feedback notes live in
 ## Roadmap
 
 Phase 0: Repo pivot
-- README, docs, Unity examples, and package scaffold.
+- Done: README, docs, Unity examples, and package scaffold.
 
 Phase 1: Unity package scaffold
-- UPM manifest, asmdefs, runtime classes, editor debugger, samples.
+- Done: UPM manifest, asmdefs, runtime classes, editor debugger, samples.
 
 Phase 2: Action registry
-- Reflection-based C# action discovery, duplicate detection, argument validation,
+- Done: reflection-based C# action discovery, duplicate detection, argument validation,
   and unknown action diagnostics.
 
 Phase 3: Minimal parser/runtime for event handlers
-- Door+Chest vertical slice: entity properties, event handlers, conditions,
+- Done: Door+Chest vertical slice with entity properties, event handlers, conditions,
   `set`, C# action execution, strict diagnostics, and debugger trace.
 
 Phase 4: State machines
-- Behavior blocks, state transitions, current state tracking, intervals, and
+- Done in v1 subset: behavior blocks, state transitions, current state tracking, intervals, and
   state entry actions.
 
 Phase 5: Scenario tests
-- `given` / `when` / `expect`, Unity editor scenario runner, and CLI runner.
+- Done in Unity package subset: `given` / `when` / `expect` and debugger result view.
 
 Phase 6: Demo Dungeon
-- Key, locked door, chest, goblin, quest, boss room, boss phase, and exit flow.
+- Done as package sample: key, locked door, chest, goblin, quest, boss room, boss phase, and exit flow.
 
 Phase 7: Publish readiness
-- UPM quality, samples, tests, documentation, changelog, license, release zip,
-  demo video, and Asset Store preparation.
+- In progress: UPM quality, samples, tests, documentation, changelog, license,
+  release tag, demo GIF, and Asset Store preparation.
 
 ## Build Current CLI
 

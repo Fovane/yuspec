@@ -1,12 +1,14 @@
-// Planned syntax example.
-// Not fully supported by the current runtime yet.
-
 entity Boss {
     state = Phase1
     health = 100
 }
 
-on Boss.HealthBelow(50%):
+on Boss.HealthBelow:
     set_state Boss Phase2
     play_cutscene "BossPhase2Intro"
     play_music "boss_phase_2"
+
+scenario "boss enters phase two" {
+    when Boss.HealthBelow
+    expect Boss.state == Phase2
+}

@@ -1,8 +1,9 @@
 # Language
 
-This document defines the intended Unity MVP syntax. The Door+Chest entity,
-handler, condition, and action subset is implemented in the Unity package.
-State machines and executable scenarios remain product targets.
+This document defines the Unity v1 syntax subset implemented by the package.
+YUSPEC is intentionally small: it models gameplay-facing entities, events,
+conditions, actions, state machines, and scenarios while C# handles the
+technical Unity implementation.
 
 ## Entity
 
@@ -34,16 +35,16 @@ Handlers have:
 
 ## Conditions
 
-Initial MVP conditions should stay small:
+The v1 condition set stays small:
 
 ```yuspec
 Player.has(Door.key)
 Door.state == Closed
 self.health <= 0
-Quest.Active("FindTheBlacksmith")
 ```
 
-Strict mode should report unknown entities, properties, functions, and obvious
+Strict mode reports unknown entities, properties, actions, duplicate handlers,
+duplicate states, unknown transitions, unreachable states, and obvious literal
 type mismatches.
 
 ## Actions
@@ -57,7 +58,8 @@ damage Player by self.damage
 spawn self.drops at self.position
 ```
 
-Some actions may be built in by the YUSPEC runtime:
+The `set` action is built into the YUSPEC runtime. Other actions are bridge
+actions discovered through `[YuspecAction]`:
 
 ```yuspec
 set Door.state = Open
@@ -82,13 +84,15 @@ behavior GoblinAI for Goblin {
 }
 ```
 
-Planned state machine constructs:
+Implemented state machine constructs:
 
 - `behavior Name for EntityType`
 - `state Name`
 - `on Event -> State`
 - `every interval:`
-- `do:` entry action block
+- `on enter:`
+- `on exit:`
+- `do:`
 
 ## Scenario
 
@@ -100,11 +104,12 @@ scenario "door opens with key" {
 }
 ```
 
-Scenario tests should let gameplay logic run without manually driving a Unity
-scene. The Unity editor runner can later surface these results in the debugger.
-Scenario blocks are currently skipped by the Unity parser.
+Scenario tests let gameplay logic run without manually driving a Unity scene.
+The Unity debugger can execute and show scenario results.
 
 ## MVP Constraint
 
-The first working slice supports the Door+Chest example subset. The language
-should expand from working demos, not from speculative syntax.
+v1 intentionally avoids function definitions, advanced type inference,
+networking, hot reload guarantees, and a general-purpose programming model. The
+language should continue to expand from working Unity demos, not speculative
+syntax.

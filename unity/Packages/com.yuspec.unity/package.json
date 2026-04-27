@@ -27,6 +27,16 @@
       "path": "Samples~/GoblinAI"
     },
     {
+      "displayName": "Quest Example",
+      "description": "Quest flow sample with conditions and scenarios.",
+      "path": "Samples~/QuestExample"
+    },
+    {
+      "displayName": "Boss Phase Example",
+      "description": "Boss phase transition sample with bridge actions.",
+      "path": "Samples~/BossPhaseExample"
+    },
+    {
       "displayName": "Demo Dungeon",
       "description": "Combined dungeon flow sample with events, states, and scenarios.",
       "path": "Samples~/DemoDungeon"

@@ -1,9 +1,22 @@
-// Planned syntax example.
-// Not fully supported by the current runtime yet.
+entity Player {
+    inventory = []
+}
 
-on Player.EnterZone("VillageGate"):
+entity Quest {
+    state = Inactive
+}
+
+on Player.EnterVillageGate:
+    set Quest.state = Active
     start_quest "FindTheBlacksmith"
 
-on Player.EnterZone("BlacksmithHouse") when Quest.Active("FindTheBlacksmith"):
+on Player.EnterBlacksmithHouse when Quest.state == Active:
+    set Quest.state = Complete
     complete_quest "FindTheBlacksmith"
     give Player "BlacksmithToken"
+
+scenario "quest completes at blacksmith house" {
+    given Quest state = Active
+    when Player.EnterBlacksmithHouse
+    expect Quest.state == Complete
+}

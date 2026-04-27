@@ -365,6 +365,7 @@ namespace Yuspec.Unity
             out int lastConsumedIndex)
         {
             lastConsumedIndex = startIndex - 1;
+            var blockIndent = -1;
 
             for (var index = startIndex; index < lines.Length; index++)
             {
@@ -380,6 +381,17 @@ namespace Yuspec.Unity
                     break;
                 }
 
+                var currentIndent = CountLeadingWhitespace(rawLine);
+                if (blockIndent < 0)
+                {
+                    blockIndent = currentIndent;
+                }
+
+                if (currentIndent < blockIndent)
+                {
+                    break;
+                }
+
                 var action = ParseAction(trimmed, sourceName, index + 1);
                 if (action != null)
                 {
@@ -390,6 +402,17 @@ namespace Yuspec.Unity
             }
 
             return lastConsumedIndex;
+        }
+
+        private static int CountLeadingWhitespace(string text)
+        {
+            var count = 0;
+            while (count < text.Length && char.IsWhiteSpace(text[count]))
+            {
+                count++;
+            }
+
+            return count;
         }
 
         private static YuspecActionSyntax CreateActionSyntax(YuspecActionCall action, string rawActionText, string sourceName, int lineNumber)

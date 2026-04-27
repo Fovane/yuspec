@@ -1,7 +1,7 @@
 # Reddit Launch Notes
 
-YUSPEC should not be introduced as a finished Unity replacement. The honest
-launch angle is early feedback on a working Unity gameplay rule layer.
+YUSPEC should not be introduced as a Unity replacement. The honest launch angle
+is a v1.0 Unity package for a focused text-based gameplay rule layer.
 
 ## Target Subreddits
 
@@ -14,13 +14,13 @@ Post to one subreddit first, learn from the response, then adapt the wording.
 ## Suggested Title
 
 ```text
-I am building a text-based gameplay rule layer for Unity to reduce MonoBehaviour script sprawl
+I made YUSPEC v1.0: a text-based gameplay rule layer for Unity to reduce MonoBehaviour script sprawl
 ```
 
 ## Short Post Draft
 
 ```text
-I am building YUSPEC, a text-based gameplay rule layer for Unity.
+I made YUSPEC v1.0, a text-based gameplay rule layer for Unity.
 
 The goal is not to replace Unity or remove C#. C# still implements technical actions. YUSPEC is for centralizing gameplay rules that usually get scattered across many MonoBehaviour scripts.
 
@@ -36,15 +36,19 @@ on Player.Interact with Door when Player.has(Door.key):
     play_animation Door "Open"
     play_sound "door_open"
 
-The first Unity slice now runs a Door+Chest example:
+The Unity package now runs Door+Chest and Demo Dungeon samples:
 
 - Player has IronKey
 - Door opens only if the condition passes
 - Chest opens when closed
 - Chest gives Gold through a C# action binding
-- Debugger shows loaded specs, diagnostics, entities, events, and action trace
+- Goblin state machine transitions are represented in text
+- Scenario tests can run in the debugger
+- Debugger shows loaded specs, diagnostics, entities, events, action trace, state machines, and scenarios
 
-The package is still early. State machines, executable scenario tests, and a larger demo dungeon are next.
+It is not a replacement for Unity or C#. The point is to move gameplay flow out
+of scattered MonoBehaviour scripts and into a readable `.yuspec` layer, while C#
+keeps implementing technical actions.
 
 I am looking for feedback from Unity developers:
 
@@ -63,6 +67,7 @@ I am looking for feedback from Unity developers:
 ## Avoid
 
 - Do not claim YUSPEC replaces C#.
-- Do not claim it is production ready.
-- Do not call it a finished v1.0 until state machines, scenario tests, package
-  tests, and the Demo Dungeon are implemented.
+- Do not claim it replaces C#.
+- Do not overclaim production use in large teams yet.
+- Be explicit that v1.0 is a focused package release, not a mature Asset Store
+  product.
