@@ -13,6 +13,7 @@ This package targets the v1.0 workflow:
 - Bind custom C# actions via `[YuspecAction]`
 - Debug events, entities, actions, states, and scenarios
 - Run scenario checks from debugger
+- Hot reload changed assigned specs while iterating
 
 This package currently provides the Unity-facing scaffold:
 
@@ -22,6 +23,7 @@ This package currently provides the Unity-facing scaffold:
 - Strict diagnostics
 - Behavior/state machine parsing and runtime
 - Scenario parser and runner
+- Poll-based hot reload for assigned spec assets
 - Spec asset importer
 - Editor debugger tabs
 - Sample `.yuspec` files
@@ -47,6 +49,16 @@ This package currently provides the Unity-facing scaffold:
 - Behavior/state blocks with transitions and `every` blocks
 - Scenario blocks with `given`, `when`, and `expect`
 - `//` and `#` comments
+
+## Hot Reload
+
+`YuspecRuntime` can poll assigned `TextAsset` and `YuspecSpecAsset` entries for
+content changes. When a changed spec is detected, the runtime reloads specs,
+re-applies declarations to registered entities, rebuilds state machine sessions,
+and emits diagnostic `YSP0600`.
+
+This is a v1 subset. It is not a full live migration system and does not
+preserve scenario results or trace history across reload.
 
 ## Notes
 

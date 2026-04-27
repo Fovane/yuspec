@@ -108,6 +108,25 @@ Expected debugger data:
 - `Player.inventory = IronKey, Gold`
 - `play_animation`, `play_sound`, and `give` action trace
 
+## Hot Reload
+
+`YuspecRuntime` has a polling-based hot reload subset. When hot reload is
+enabled, the runtime checks assigned `TextAsset` or `YuspecSpecAsset` content
+for changes and reloads specs when the content hash changes.
+
+Current scope:
+
+- Reloads assigned spec assets.
+- Re-applies declarations to registered entities.
+- Rebuilds state machine sessions.
+- Records diagnostic `YSP0600`.
+
+Current limits:
+
+- It does not preserve scenario results or trace history across reload.
+- It does not discover newly created scene entities by itself.
+- It does not support a full dependency graph or live migration model yet.
+
 ## Git Hygiene
 
 Commit Unity assets, project settings, package files, and `.meta` files.

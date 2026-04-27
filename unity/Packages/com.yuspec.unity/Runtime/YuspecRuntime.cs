@@ -7,10 +7,13 @@ using UnityEngine;
 
 namespace Yuspec.Unity
 {
+    [ExecuteAlways]
     public sealed class YuspecRuntime : MonoBehaviour
     {
         [SerializeField] private UnityEngine.Object[] specs;
         [SerializeField] private bool strictMode = true;
+        [SerializeField] private bool hotReload = true;
+        [SerializeField] private float hotReloadPollInterval = 0.5f;
         [SerializeField] private int maxRecentEvents = 100;
 
         private readonly Dictionary<string, YuspecEntity> entitiesById = new Dictionary<string, YuspecEntity>();
@@ -22,7 +25,9 @@ namespace Yuspec.Unity
         private readonly List<YuspecStateMachineStatus> stateMachineStatuses = new List<YuspecStateMachineStatus>();
         private readonly List<YuspecScenarioResult> scenarioResults = new List<YuspecScenarioResult>();
         private readonly List<StateMachineSession> stateMachineSessions = new List<StateMachineSession>();
+        private readonly Dictionary<UnityEngine.Object, int> specContentHashes = new Dictionary<UnityEngine.Object, int>();
         private readonly YuspecActionRegistry actionRegistry = new YuspecActionRegistry();
+        private float hotReloadTimer;
 
         private static readonly Regex ExpectEquals = new Regex(
             @"^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*==\s*(.+)$",
@@ -33,6 +38,8 @@ namespace Yuspec.Unity
 
         public IReadOnlyList<UnityEngine.Object> Specs => specs ?? Array.Empty<UnityEngine.Object>();
         public bool StrictMode => strictMode;
+        public bool HotReload => hotReload;
+        public float HotReloadPollInterval => hotReloadPollInterval;
         public YuspecActionRegistry ActionRegistry => actionRegistry;
         public IReadOnlyList<YuspecCompiledSpec> CompiledSpecs => compiledSpecs;
         public IReadOnlyList<YuspecDiagnostic> Diagnostics => diagnostics;
@@ -50,7 +57,12 @@ namespace Yuspec.Unity
 
         private void Update()
         {
-            TickStateMachines(Time.deltaTime);
+            if (Application.isPlaying)
+            {
+                TickStateMachines(Time.deltaTime);
+            }
+
+            TickHotReload(Application.isPlaying ? Time.deltaTime : hotReloadPollInterval);
         }
 
         public void Initialize()
@@ -121,6 +133,23 @@ namespace Yuspec.Unity
             ValidateStrictReferences();
             ApplyDeclarationsToRegisteredEntities();
             BuildStateMachineSessions();
+            CaptureSpecHashes();
+        }
+
+        public bool ReloadSpecsIfChanged()
+        {
+            if (!HaveSpecHashesChanged())
+            {
+                return false;
+            }
+
+            Initialize();
+            ApplyDeclarationsToRegisteredEntities(true);
+            BuildStateMachineSessions();
+            var diagnostic = new YuspecDiagnostic(YuspecDiagnosticSeverity.Info, "YSP0600", "Hot reloaded changed YUSPEC specs.");
+            diagnostics.Add(diagnostic);
+            AddTrace(YuspecTraceKind.Diagnostic, diagnostic.ToString());
+            return true;
         }
 
         public void RegisterEntity(YuspecEntity entity)
@@ -692,15 +721,15 @@ namespace Yuspec.Unity
                 1));
         }
 
-        private void ApplyDeclarationsToRegisteredEntities()
+        private void ApplyDeclarationsToRegisteredEntities(bool overwriteExisting = false)
         {
             foreach (var entity in entitiesById.Values)
             {
-                ApplyDeclaration(entity);
+                ApplyDeclaration(entity, overwriteExisting);
             }
         }
 
-        private void ApplyDeclaration(YuspecEntity entity)
+        private void ApplyDeclaration(YuspecEntity entity, bool overwriteExisting = false)
         {
             var declaration = compiledSpecs
                 .SelectMany(spec => spec.Entities)
@@ -715,7 +744,7 @@ namespace Yuspec.Unity
             {
                 if (string.Equals(property.Key, "state", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (string.IsNullOrEmpty(entity.CurrentState))
+                    if (overwriteExisting || string.IsNullOrEmpty(entity.CurrentState))
                     {
                         entity.SetProperty(property.Key, property.Value);
                     }
@@ -723,7 +752,7 @@ namespace Yuspec.Unity
                     continue;
                 }
 
-                if (!entity.Properties.ContainsKey(property.Key))
+                if (overwriteExisting || !entity.Properties.ContainsKey(property.Key))
                 {
                     entity.SetProperty(property.Key, property.Value);
                 }
@@ -1319,6 +1348,75 @@ namespace Yuspec.Unity
             }
 
             return null;
+        }
+
+        private void TickHotReload(float deltaTime)
+        {
+            if (!hotReload)
+            {
+                return;
+            }
+
+            hotReloadTimer += Mathf.Max(0f, deltaTime);
+            var interval = Mathf.Max(0.1f, hotReloadPollInterval);
+            if (hotReloadTimer < interval)
+            {
+                return;
+            }
+
+            hotReloadTimer = 0f;
+            ReloadSpecsIfChanged();
+        }
+
+        private void CaptureSpecHashes()
+        {
+            specContentHashes.Clear();
+            if (specs == null)
+            {
+                return;
+            }
+
+            foreach (var spec in specs)
+            {
+                if (spec == null)
+                {
+                    continue;
+                }
+
+                specContentHashes[spec] = GetSpecHash(spec);
+            }
+        }
+
+        private bool HaveSpecHashesChanged()
+        {
+            if (specs == null)
+            {
+                return specContentHashes.Count != 0;
+            }
+
+            var seen = new HashSet<UnityEngine.Object>();
+            foreach (var spec in specs)
+            {
+                if (spec == null)
+                {
+                    continue;
+                }
+
+                seen.Add(spec);
+                var currentHash = GetSpecHash(spec);
+                if (!specContentHashes.TryGetValue(spec, out var previousHash) || previousHash != currentHash)
+                {
+                    return true;
+                }
+            }
+
+            return specContentHashes.Keys.Any(spec => !seen.Contains(spec));
+        }
+
+        private static int GetSpecHash(UnityEngine.Object spec)
+        {
+            var text = GetSpecText(spec) ?? string.Empty;
+            return StringComparer.Ordinal.GetHashCode(text);
         }
     }
 }

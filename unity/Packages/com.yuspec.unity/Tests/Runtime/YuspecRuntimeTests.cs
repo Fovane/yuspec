@@ -143,14 +143,83 @@ scenario ""door opens with key"" {
             Assert.That(registry.Diagnostics.Any(d => d.code == "YSP0003"), Is.True);
         }
 
+        [Test]
+        public void HotReload_ReloadsChangedSpecAsset()
+        {
+            var specAsset = ScriptableObject.CreateInstance<YuspecSpecAsset>();
+            specAsset.SetSource("HotReloadSpec", @"
+entity Door {
+    state = Closed
+}
+");
+
+            var runtime = CreateRuntime(specAsset);
+            var door = CreateEntity("Door01", "Door");
+            runtime.RegisterEntity(door);
+            Assert.That(door.CurrentState, Is.EqualTo("Closed"));
+
+            specAsset.SetSource("HotReloadSpec", @"
+entity Door {
+    state = Open
+}
+");
+
+            var reloaded = runtime.ReloadSpecsIfChanged();
+
+            Assert.That(reloaded, Is.True);
+            Assert.That(door.CurrentState, Is.EqualTo("Open"));
+            Assert.That(runtime.Diagnostics.Any(d => d.code == "YSP0600"), Is.True);
+
+            DestroyEntity(door);
+            DestroyRuntime(runtime);
+            UnityEngine.Object.DestroyImmediate(specAsset);
+        }
+
+        [Test]
+        public void EventBridge_EnterZoneEntity_EmitsSupportedEventName()
+        {
+            const string source = @"
+entity Player {
+}
+
+entity BossRoom {
+    state = Locked
+}
+
+on Player.EnterBossRoom with BossRoom:
+    set BossRoom.state = Open
+";
+
+            var runtime = CreateRuntime(source);
+            var player = CreateEntity("Player01", "Player");
+            var bossRoom = CreateEntity("BossRoom01", "BossRoom");
+            var bridgeObject = new GameObject("Bridge");
+            var bridge = bridgeObject.AddComponent<YuspecEventBridge>();
+
+            runtime.RegisterEntity(player);
+            runtime.RegisterEntity(bossRoom);
+            bridge.EmitEnterZone(player, bossRoom);
+
+            Assert.That(bossRoom.CurrentState, Is.EqualTo("Open"));
+
+            UnityEngine.Object.DestroyImmediate(bridgeObject);
+            DestroyEntity(player);
+            DestroyEntity(bossRoom);
+            DestroyRuntime(runtime);
+        }
+
         private static YuspecRuntime CreateRuntime(string source)
+        {
+            return CreateRuntime(new TextAsset(source));
+        }
+
+        private static YuspecRuntime CreateRuntime(UnityEngine.Object spec)
         {
             var runtimeObject = new GameObject("Runtime");
             var runtime = runtimeObject.AddComponent<YuspecRuntime>();
-            var textAsset = new TextAsset(source);
 
             var field = typeof(YuspecRuntime).GetField("specs", BindingFlags.NonPublic | BindingFlags.Instance);
-            field.SetValue(runtime, new UnityEngine.Object[] { textAsset });
+            field.SetValue(runtime, new[] { spec });
             runtime.Initialize();
             return runtime;
         }

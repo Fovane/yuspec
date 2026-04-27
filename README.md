@@ -47,6 +47,7 @@ Currently working:
 - Behavior/state machine blocks with transitions, enter/exit/do actions, and `every` intervals
 - Scenario tests with `given` / `when` / `expect`
 - Runtime diagnostics and debugger trace
+- Poll-based hot reload for assigned spec assets
 - Door+Chest and Demo Dungeon samples
 
 Still intentionally limited:
@@ -54,7 +55,7 @@ Still intentionally limited:
 - No visual graph editor
 - No networking or replication layer
 - No full general-purpose programming model
-- No hot reload guarantee yet
+- Hot reload is a working subset, not a full asset dependency graph or live scene migration system
 - Project-specific actions should still be implemented in C# for real games
 
 ## Feature Status
@@ -71,7 +72,7 @@ Still intentionally limited:
 | State machines | Working subset |
 | Scenario tests | Working subset |
 | Demo Dungeon | Working sample |
-| Hot reload | Planned |
+| Hot reload | Working subset |
 
 ## The Problem
 
@@ -370,6 +371,10 @@ Phase 6: Demo Dungeon
 Phase 7: Publish readiness
 - In progress: UPM quality, samples, tests, documentation, changelog, license,
   release tag, demo GIF, and Asset Store preparation.
+
+Phase 8: Hardening
+- Hot reload beyond assigned spec asset polling, richer Unity event payloads,
+  CI automation, and production service bindings.
 
 ## Build Current CLI
 

@@ -114,7 +114,7 @@ Status: in progress.
 Remaining post-v1 work:
 
 - CI automation.
-- Hot reload.
+- Hot reload hardening beyond assigned spec asset polling.
 - Richer type inference.
 - More production-oriented Unity service bindings.
 - Asset Store submission packaging.

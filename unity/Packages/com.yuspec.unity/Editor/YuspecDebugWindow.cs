@@ -280,6 +280,8 @@ namespace Yuspec.Unity.Editor
         {
             DrawSection("Settings");
             EditorGUILayout.LabelField("Strict Mode", runtime.StrictMode ? "Enabled" : "Disabled");
+            EditorGUILayout.LabelField("Hot Reload", runtime.HotReload ? "Enabled" : "Disabled");
+            EditorGUILayout.LabelField("Hot Reload Poll Interval", $"{runtime.HotReloadPollInterval:0.00}s");
             autoRefresh = EditorGUILayout.Toggle("Auto Refresh", autoRefresh);
         }
 

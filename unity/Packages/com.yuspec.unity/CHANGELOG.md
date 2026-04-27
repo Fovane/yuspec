@@ -8,6 +8,8 @@ All notable changes to this package are documented in this file.
 - Added syntax tree model with source locations.
 - Added strict validation for duplicates, transitions, intervals, and scenario entity references.
 - Added runtime state machine execution and scenario runner.
+- Added polling-based hot reload for assigned spec assets.
+- Fixed Unity event bridge emitted event names to match the supported parser syntax.
 - Added debugger tabs for overview, specs, diagnostics, entities, events, actions, state machines, scenarios, and settings.
 - Added runtime and editor test assemblies and baseline tests.
 - Added common bridge action stubs for Demo Dungeon flows.

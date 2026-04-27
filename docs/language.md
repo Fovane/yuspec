@@ -110,6 +110,7 @@ The Unity debugger can execute and show scenario results.
 ## MVP Constraint
 
 v1 intentionally avoids function definitions, advanced type inference,
-networking, hot reload guarantees, and a general-purpose programming model. The
+networking, full live scene migration, and a general-purpose programming model.
+Hot reload exists as a polling-based Unity subset for assigned spec assets. The
 language should continue to expand from working Unity demos, not speculative
 syntax.
