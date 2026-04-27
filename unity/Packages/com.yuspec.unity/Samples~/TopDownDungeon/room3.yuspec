@@ -5,7 +5,7 @@ entity BossRoom {
 }
 
 entity Boss {
-    state: string = "Phase1"
+    state: string = "Dormant"
     health: int = 120
     phase2Threshold: int = 60
     damage: int = 15
@@ -26,6 +26,7 @@ on Player.EnterBossRoom with BossRoom:
     set BossRoom.visited = true
     play_sound "boss_theme"
     start_dialogue "BossIntro"
+    emit "Boss.PlayerSeen" Boss
 
 on Player.Interact with Boss:
     take_damage Boss by Player.attack
@@ -38,6 +39,12 @@ on Boss.Died:
     show_ui_message "The exit door opens."
 
 behavior BossAI for Boss {
+    state Dormant {
+        on PlayerSeen -> Phase1
+        on self.health <= 0 -> Dead
+        on self.health <= 60 -> Phase2
+    }
+
     state Phase1 {
         every 1s:
             take_damage Player by Boss.damage

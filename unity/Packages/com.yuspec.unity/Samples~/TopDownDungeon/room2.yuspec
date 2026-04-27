@@ -44,6 +44,9 @@ behavior GoblinAI for Goblin {
     }
 
     state Chase {
+        every 0.01s:
+            move_towards Player speed Goblin.chaseSpeed
+
         every 0.5s:
             show_ui_message "The goblin is chasing you."
 

@@ -452,12 +452,18 @@ namespace Yuspec.Unity
                     continue;
                 }
 
-                if (binding.ParameterTypes.Length != action.Arguments.Count)
+                var parameterTypes = binding.ParameterTypes;
+                if (IsActorInjectedMoveTowards(action, parameterTypes))
+                {
+                    parameterTypes = parameterTypes.Skip(1).ToArray();
+                }
+
+                if (parameterTypes.Length != action.Arguments.Count)
                 {
                     AddDiagnostic(new YuspecDiagnostic(
                         YuspecDiagnosticSeverity.Error,
                         "YSP0105",
-                        $"Action '{action.Name}' expects {binding.ParameterTypes.Length} argument(s), got {action.Arguments.Count}.",
+                        $"Action '{action.Name}' expects {parameterTypes.Length} argument(s), got {action.Arguments.Count}.",
                         string.Empty,
                         action.Line,
                         1));
@@ -472,7 +478,7 @@ namespace Yuspec.Unity
                         continue;
                     }
 
-                    var required = binding.ParameterTypes[index];
+                    var required = parameterTypes[index];
                     if (!IsTypeCompatible(required, inferred))
                     {
                         AddDiagnostic(new YuspecDiagnostic(
@@ -1112,6 +1118,19 @@ namespace Yuspec.Unity
 
         private object[] ResolveActionArguments(YuspecActionCall action, YuspecEntity actor, YuspecEntity target)
         {
+            if (string.Equals(action.Name, "move_towards", StringComparison.OrdinalIgnoreCase) &&
+                actionRegistry.TryGetAction(action.Name, out var moveBinding) &&
+                IsActorInjectedMoveTowards(action, moveBinding.ParameterTypes))
+            {
+                return new object[]
+                {
+                    actor,
+                    ResolveValue(action.Arguments[0], actor, target),
+                    ResolveValue(action.Arguments[1], actor, target),
+                    ResolveValue(action.Arguments[2], actor, target)
+                };
+            }
+
             if (!actionRegistry.TryGetAction(action.Name, out var binding) || binding.ParameterTypes.Length != action.Arguments.Count)
             {
                 return action.Arguments.Select(argument => ResolveValue(argument, actor, target)).ToArray();
@@ -1125,6 +1144,15 @@ namespace Yuspec.Unity
             }
 
             return args;
+        }
+
+        private static bool IsActorInjectedMoveTowards(YuspecActionCall action, Type[] parameterTypes)
+        {
+            return string.Equals(action.Name, "move_towards", StringComparison.OrdinalIgnoreCase) &&
+                   parameterTypes.Length == 4 &&
+                   parameterTypes[0] == typeof(YuspecEntity) &&
+                   parameterTypes[1] == typeof(YuspecEntity) &&
+                   action.Arguments.Count == 3;
         }
 
         private static object ConvertToType(object value, Type targetType)

@@ -100,6 +100,97 @@ behavior GoblinAI for Goblin {
         }
 
         [Test]
+        public void StateMachineRuntime_MoveTowardsAdvancesGoblinTowardPlayer()
+        {
+            const string source = @"
+entity Goblin {
+    state = Idle
+}
+
+entity Player {
+}
+
+behavior GoblinAI for Goblin {
+    state Idle {
+        on PlayerSeen -> Chase
+    }
+
+    state Chase {
+        every 0.1s:
+            move_towards Player speed 3
+    }
+}
+";
+
+            var runtime = CreateRuntime(source);
+            var goblin = CreateEntity("Goblin01", "Goblin");
+            var player = CreateEntity("Player01", "Player");
+            goblin.transform.position = Vector3.zero;
+            player.transform.position = new Vector3(5f, 0f, 0f);
+
+            runtime.RegisterEntity(goblin);
+            runtime.RegisterEntity(player);
+            runtime.Emit("Goblin.PlayerSeen", goblin, player);
+            runtime.TickStateMachines(0.2f);
+
+            Assert.That(goblin.transform.position.x, Is.GreaterThan(0f));
+            Assert.That(goblin.transform.position.x, Is.LessThan(5f));
+            Assert.That(goblin.transform.position.z, Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(runtime.Diagnostics.Any(d => d.code == "YSP0105"), Is.False);
+
+            DestroyEntity(goblin);
+            DestroyEntity(player);
+            DestroyRuntime(runtime);
+        }
+
+        [Test]
+        public void StateMachineRuntime_DormantBossDoesNotDamagePlayerUntilActivated()
+        {
+            const string source = @"
+entity Player {
+    health: int = 100
+}
+
+entity Boss {
+    state: string = ""Dormant""
+    damage: int = 15
+}
+
+behavior BossAI for Boss {
+    state Dormant {
+        on PlayerSeen -> Phase1
+    }
+
+    state Phase1 {
+        every 1s:
+            take_damage Player by Boss.damage
+    }
+}
+";
+
+            var runtime = CreateRuntime(source);
+            var player = CreateEntity("Player01", "Player");
+            var boss = CreateEntity("Boss01", "Boss");
+
+            runtime.RegisterEntity(player);
+            runtime.RegisterEntity(boss);
+            runtime.TickStateMachines(1.1f);
+
+            Assert.That(player.TryGetProperty("health", out var idleHealth), Is.True);
+            Assert.That(idleHealth, Is.EqualTo(100));
+
+            runtime.Emit("Boss.PlayerSeen", boss, player);
+            runtime.TickStateMachines(1.1f);
+
+            Assert.That(player.TryGetProperty("health", out var activeHealth), Is.True);
+            Assert.That(activeHealth, Is.EqualTo(85));
+
+            DestroyEntity(player);
+            DestroyEntity(boss);
+            DestroyRuntime(runtime);
+        }
+
+        [Test]
         public void ScenarioRunner_ReturnsPassForDoorCase()
         {
             const string source = @"

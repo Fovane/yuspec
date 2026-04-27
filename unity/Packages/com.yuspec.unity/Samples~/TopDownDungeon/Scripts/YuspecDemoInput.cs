@@ -11,9 +11,11 @@ namespace Yuspec.Unity.Samples.TopDownDungeon
         [SerializeField] private YuspecEntity player;
         [SerializeField] private float room2EnterX = 5.5f;
         [SerializeField] private float bossRoomEnterX = 13.5f;
+        [SerializeField] private float goblinAttackExitPadding = 0.3f;
 
         private bool emittedRoom2Enter;
         private bool emittedBossRoomEnter;
+        private bool goblinInAttackRange;
 
         public void Configure(YuspecRuntime configuredRuntime, YuspecEntity configuredPlayer)
         {
@@ -55,6 +57,7 @@ namespace Yuspec.Unity.Samples.TopDownDungeon
             }
 
             EmitRoomEnterEvents();
+            EmitGoblinRangeEvents();
         }
 
         private void EmitRoomEnterEvents()
@@ -69,6 +72,31 @@ namespace Yuspec.Unity.Samples.TopDownDungeon
             {
                 emittedBossRoomEnter = true;
                 runtime.Emit("Player.EnterBossRoom", player, FindEntity("BossRoom"));
+            }
+        }
+
+        private void EmitGoblinRangeEvents()
+        {
+            var goblin = FindEntity("Goblin");
+            if (goblin == null || !IsAliveAndSpawned(goblin))
+            {
+                goblinInAttackRange = false;
+                return;
+            }
+
+            var distance = Vector3.Distance(goblin.transform.position, player.transform.position);
+            var attackRange = ReadFloat(goblin, "attackRange", 1.2f);
+            if (!goblinInAttackRange && distance <= attackRange)
+            {
+                goblinInAttackRange = true;
+                runtime.Emit("Goblin.InAttackRange", goblin, player);
+                return;
+            }
+
+            if (goblinInAttackRange && distance > attackRange + goblinAttackExitPadding)
+            {
+                goblinInAttackRange = false;
+                runtime.Emit("Goblin.PlayerOutOfRange", goblin, player);
             }
         }
 
@@ -110,6 +138,23 @@ namespace Yuspec.Unity.Samples.TopDownDungeon
         private static float ReadFloat(YuspecEntity entity, string property, float fallback)
         {
             if (entity.TryGetProperty(property, out var value) && float.TryParse(value?.ToString(), out var parsed))
+            {
+                return parsed;
+            }
+
+            return fallback;
+        }
+
+        private static bool IsAliveAndSpawned(YuspecEntity entity)
+        {
+            return ReadBool(entity, "alive", true) &&
+                   ReadBool(entity, "spawned", entity.gameObject.activeInHierarchy) &&
+                   entity.gameObject.activeInHierarchy;
+        }
+
+        private static bool ReadBool(YuspecEntity entity, string property, bool fallback)
+        {
+            if (entity.TryGetProperty(property, out var value) && bool.TryParse(value?.ToString(), out var parsed))
             {
                 return parsed;
             }
