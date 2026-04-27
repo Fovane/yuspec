@@ -1,0 +1,46 @@
+{
+  "name": "vscode-yuspec",
+  "displayName": "YUSPEC",
+  "description": "Language support for .yuspec gameplay rule files.",
+  "version": "1.1.0",
+  "publisher": "yuspec",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:yuspec"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "yuspec",
+        "aliases": [
+          "YUSPEC",
+          "yuspec"
+        ],
+        "extensions": [
+          ".yuspec"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "yuspec",
+        "scopeName": "source.yuspec",
+        "path": "./syntaxes/yuspec.tmLanguage.json"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.70.0"
+  }
+}
