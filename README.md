@@ -7,7 +7,7 @@ entities, events, conditions, actions, state machines, and scenario tests in
 readable `.yuspec` files instead of scattering gameplay logic across hundreds of
 C# MonoBehaviour scripts.
 
-![YUSPEC Door demo](docs/assets/yuspec-door-demo-v2.gif)
+![YUSPEC Door and Chest demo](docs/assets/yuspec-door-chest-demo-v1.gif)
 
 The current C++ compiler/runtime remains in the repository as the foundation.
 The Unity package now targets a v1.0 vertical slice: events, conditions, action
