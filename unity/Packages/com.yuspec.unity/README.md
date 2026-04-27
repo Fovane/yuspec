@@ -2,18 +2,30 @@
 
 YUSPEC is a text-based gameplay rule layer for Unity.
 
-This package is currently an early prototype.
-The Door+Chest sample is the first supported runtime slice.
-State machines, scenario tests, and Demo Dungeon are planned.
+Tagline: Write gameplay rules, not script spaghetti.
+
+This package targets the v1.0 workflow:
+
+- Install package
+- Add `YuspecRuntime` to scene
+- Attach `YuspecEntity` to GameObjects
+- Author `.yuspec` files for gameplay rules
+- Bind custom C# actions via `[YuspecAction]`
+- Debug events, entities, actions, states, and scenarios
+- Run scenario checks from debugger
 
 This package currently provides the Unity-facing scaffold:
 
 - Runtime entity and event bridge components
+- Event-rule execution runtime
 - Reflection-based action registry
-- Diagnostics model
+- Strict diagnostics
+- Behavior/state machine parsing and runtime
+- Scenario parser and runner
 - Spec asset importer
-- Editor debugger window
+- Editor debugger tabs
 - Sample `.yuspec` files
+- Runtime and editor tests
 
 ## Usage
 
@@ -22,15 +34,22 @@ This package currently provides the Unity-facing scaffold:
 3. Add `YuspecEntity` to relevant GameObjects.
 4. Set entity IDs and types to match the `.yuspec` file.
 5. Emit gameplay events through `YuspecEventBridge` or `YuspecRuntime.Emit`.
-6. Open `Window > YUSPEC > Debugger` to inspect runtime state.
+6. Open `Window > YUSPEC > Debugger`.
+7. Use tabs to inspect overview, specs, diagnostics, entities, events, actions,
+   state machines, scenarios, and settings.
+8. Use `Run Scenarios` to execute parsed scenario blocks.
 
-## Working Slice
+## Supported v1 Syntax Areas
 
-The Door+Chest subset currently covers entity properties, `on Actor.Event with
-Target when ...:`, `Player.has(Door.key)`, `Target.state == Closed`, `set`,
-`play_animation`, `play_sound`, `give`, strict diagnostics, and debugger trace.
+- Entity declarations and properties
+- Event handlers with optional `with` and `when`
+- Action calls and `set` assignments
+- Behavior/state blocks with transitions and `every` blocks
+- Scenario blocks with `given`, `when`, and `expect`
+- `//` and `#` comments
 
 ## Notes
 
-The package does not claim full DSL support yet.
-Goblin AI, scenario tests, and the full Demo Dungeon remain roadmap work.
+YUSPEC is delivered through stable vertical slices.
+If a feature is not implemented, it should appear as a diagnostic or documented
+limitation, not as a silent no-op.

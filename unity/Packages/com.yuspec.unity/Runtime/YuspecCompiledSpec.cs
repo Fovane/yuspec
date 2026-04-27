@@ -5,12 +5,16 @@ namespace Yuspec.Unity
     public sealed class YuspecCompiledSpec
     {
         public string SourceName { get; }
+        public YuspecSyntaxTree SyntaxTree { get; }
         public List<YuspecEntityDeclaration> Entities { get; } = new List<YuspecEntityDeclaration>();
         public List<YuspecEventHandler> EventHandlers { get; } = new List<YuspecEventHandler>();
+        public List<YuspecBehaviorDefinition> Behaviors { get; } = new List<YuspecBehaviorDefinition>();
+        public List<YuspecScenarioDefinition> Scenarios { get; } = new List<YuspecScenarioDefinition>();
 
         public YuspecCompiledSpec(string sourceName)
         {
             SourceName = sourceName;
+            SyntaxTree = new YuspecSyntaxTree(sourceName);
         }
     }
 
@@ -141,6 +145,92 @@ namespace Yuspec.Unity
             TargetEntity = targetEntity;
             TargetProperty = targetProperty;
             AssignedValue = assignedValue;
+        }
+    }
+
+    public sealed class YuspecBehaviorDefinition
+    {
+        public string Name { get; }
+        public string EntityType { get; }
+        public int Line { get; }
+        public List<YuspecStateDefinition> States { get; } = new List<YuspecStateDefinition>();
+
+        public YuspecBehaviorDefinition(string name, string entityType, int line)
+        {
+            Name = name;
+            EntityType = entityType;
+            Line = line;
+        }
+    }
+
+    public sealed class YuspecStateDefinition
+    {
+        public string Name { get; }
+        public int Line { get; }
+        public List<YuspecActionCall> EnterActions { get; } = new List<YuspecActionCall>();
+        public List<YuspecActionCall> ExitActions { get; } = new List<YuspecActionCall>();
+        public List<YuspecActionCall> DoActions { get; } = new List<YuspecActionCall>();
+        public List<YuspecTimedActionBlock> EveryBlocks { get; } = new List<YuspecTimedActionBlock>();
+        public List<YuspecTransitionDefinition> Transitions { get; } = new List<YuspecTransitionDefinition>();
+
+        public YuspecStateDefinition(string name, int line)
+        {
+            Name = name;
+            Line = line;
+        }
+    }
+
+    public sealed class YuspecTimedActionBlock
+    {
+        public string IntervalText { get; }
+        public int Line { get; }
+        public List<YuspecActionCall> Actions { get; } = new List<YuspecActionCall>();
+
+        public YuspecTimedActionBlock(string intervalText, int line)
+        {
+            IntervalText = intervalText;
+            Line = line;
+        }
+    }
+
+    public sealed class YuspecTransitionDefinition
+    {
+        public string TriggerText { get; }
+        public string TargetState { get; }
+        public int Line { get; }
+
+        public YuspecTransitionDefinition(string triggerText, string targetState, int line)
+        {
+            TriggerText = triggerText;
+            TargetState = targetState;
+            Line = line;
+        }
+    }
+
+    public sealed class YuspecScenarioDefinition
+    {
+        public string Name { get; }
+        public int Line { get; }
+        public List<YuspecScenarioStepDefinition> GivenSteps { get; } = new List<YuspecScenarioStepDefinition>();
+        public List<YuspecScenarioStepDefinition> WhenSteps { get; } = new List<YuspecScenarioStepDefinition>();
+        public List<YuspecScenarioStepDefinition> ExpectSteps { get; } = new List<YuspecScenarioStepDefinition>();
+
+        public YuspecScenarioDefinition(string name, int line)
+        {
+            Name = name;
+            Line = line;
+        }
+    }
+
+    public sealed class YuspecScenarioStepDefinition
+    {
+        public string Text { get; }
+        public int Line { get; }
+
+        public YuspecScenarioStepDefinition(string text, int line)
+        {
+            Text = text;
+            Line = line;
         }
     }
 }

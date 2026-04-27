@@ -1,0 +1,22 @@
+{
+  "name": "Yuspec.Editor.Tests",
+  "rootNamespace": "Yuspec.Unity.Editor.Tests",
+  "references": [
+    "Yuspec.Runtime",
+    "Yuspec.Editor"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

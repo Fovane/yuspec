@@ -1,7 +1,5 @@
-// Planned syntax example.
-// Not fully supported by the current runtime yet.
-
 entity Goblin {
+    state = Idle
     health = 30
     damage = 5
     drops = "GoldCoin"
@@ -9,11 +7,17 @@ entity Goblin {
 
 behavior GoblinAI for Goblin {
     state Idle {
+        on enter:
+            play_animation self "Idle"
+
         on PlayerSeen -> Chase
     }
 
     state Chase {
-        every 0.2s:
+        on enter:
+            play_animation self "Run"
+
+        every 0.25s:
             move_towards Player speed 3
 
         on InAttackRange -> Attack
@@ -33,4 +37,8 @@ behavior GoblinAI for Goblin {
             spawn self.drops at self.position
             destroy self
     }
+}
+
+scenario "goblin starts idle" {
+    expect Goblin.state == Idle
 }

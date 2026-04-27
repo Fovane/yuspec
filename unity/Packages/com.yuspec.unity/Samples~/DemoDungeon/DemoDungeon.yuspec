@@ -1,9 +1,6 @@
-// Planned syntax example.
-// Not fully supported by the current runtime yet.
-
 entity Player {
     inventory = []
-    quest = None
+    quest = "None"
 }
 
 entity Door {
@@ -17,6 +14,7 @@ entity Chest {
 }
 
 entity Goblin {
+    state = Idle
     health = 30
     damage = 5
     drops = "GoldCoin"
@@ -27,7 +25,15 @@ entity Boss {
     health = 100
 }
 
-on Player.Pickup with IronKey:
+entity BossRoom {
+    state = Locked
+}
+
+entity ExitDoor {
+    state = Closed
+}
+
+on Player.Pickup with Chest:
     give Player "IronKey"
     play_sound "item_pickup"
 
@@ -43,11 +49,17 @@ on Player.Interact with Chest when Chest.state == Closed:
 
 behavior GoblinAI for Goblin {
     state Idle {
+        on enter:
+            play_animation self "Idle"
+
         on PlayerSeen -> Chase
     }
 
     state Chase {
-        every 0.2s:
+        on enter:
+            play_animation self "Run"
+
+        every 0.25s:
             move_towards Player speed 3
 
         on InAttackRange -> Attack
@@ -69,20 +81,31 @@ behavior GoblinAI for Goblin {
     }
 }
 
-on Player.EnterZone("VillageGate"):
+on Player.EnterVillage:
     start_quest "ClearTheDungeon"
 
-on Player.EnterZone("BossRoom"):
-    lock Door.BossRoom
-    spawn Boss at BossSpawnPoint
+on Player.EnterBossRoom with BossRoom:
+    set BossRoom.state = Open
     play_music "boss_theme"
 
-on Boss.HealthBelow(50%):
-    set_state Boss Phase2
+on Boss.HealthBelow:
+    set Boss.state = Phase2
     play_cutscene "BossPhase2Intro"
     play_music "boss_phase_2"
 
 on Boss.Died:
-    unlock Door.Exit
+    set ExitDoor.state = Open
     give Player "AncientKey"
     complete_quest "ClearTheDungeon"
+
+scenario "dungeon door opens with key" {
+    given Player has "IronKey"
+    when Player.Interact Door
+    expect Door.state == Open
+}
+
+scenario "chest opens once" {
+    given Chest state = Closed
+    when Player.Interact Chest
+    expect Chest.state == Open
+}

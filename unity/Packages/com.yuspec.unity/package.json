@@ -1,7 +1,7 @@
 {
   "name": "com.yuspec.unity",
   "displayName": "YUSPEC",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "unity": "2022.3",
   "description": "Text-based gameplay rule layer for Unity.",
   "keywords": [
@@ -20,6 +20,16 @@
       "displayName": "Door Example",
       "description": "Minimal locked-door gameplay rule sample.",
       "path": "Samples~/DoorExample"
+    },
+    {
+      "displayName": "Goblin AI",
+      "description": "State machine gameplay rule sample.",
+      "path": "Samples~/GoblinAI"
+    },
+    {
+      "displayName": "Demo Dungeon",
+      "description": "Combined dungeon flow sample with events, states, and scenarios.",
+      "path": "Samples~/DemoDungeon"
     }
   ]
 }

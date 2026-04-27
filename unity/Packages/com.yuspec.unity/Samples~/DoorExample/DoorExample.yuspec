@@ -21,3 +21,15 @@ on Player.Interact with Chest when Chest.state == Closed:
     set Chest.state = Open
     give Player Chest.reward
     play_sound "chest_open"
+
+scenario "door opens with key" {
+    given Player has "IronKey"
+    when Player.Interact Door
+    expect Door.state == Open
+}
+
+scenario "door stays closed without key" {
+    given Player inventory = []
+    when Player.Interact Door
+    expect Door.state == Closed
+}

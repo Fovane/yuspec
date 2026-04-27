@@ -1,6 +1,6 @@
 # Door Example
 
-This sample is the first supported Unity runtime slice.
+This sample demonstrates supported v1 event rules and scenario tests.
 
 It demonstrates:
 
@@ -11,9 +11,9 @@ It demonstrates:
 - A `Player.has(Door.key)` condition
 - A `Chest.state == Closed` condition
 - Four actions: `set`, `play_animation`, `play_sound`, and `give`
-- A scenario test target
+- Two runnable scenario tests
 
-Current status: this is the intended manually testable slice for the current prototype. Scenario blocks are planned syntax and are skipped by the parser.
+Current status: this sample uses supported runtime syntax.
 
 To test it in a Unity scene:
 
@@ -24,11 +24,9 @@ To test it in a Unity scene:
 5. Ensure the player has `IronKey` in inventory or another runtime property.
 6. Call `YuspecRuntime.Emit("Player.Interact", playerEntity, doorEntity)`.
 7. Call `YuspecRuntime.Emit("Player.Interact", playerEntity, chestEntity)`.
-8. Open `Window > YUSPEC > Debugger` to inspect the matched handler, condition,
-   actions, recent event, and debug trace.
+8. Open `Window > YUSPEC > Debugger` to inspect events, actions, and state.
+9. Click `Run Scenarios` in the debugger and verify both scenarios pass.
 
 Limitations:
 
-- Only the Door+Chest event-handler subset is implemented.
-- `behavior` and `scenario` blocks are parsed as future syntax and skipped.
 - `play_sound` logs until a project binds real audio.

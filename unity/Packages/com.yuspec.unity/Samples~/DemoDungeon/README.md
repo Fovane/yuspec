@@ -1,17 +1,20 @@
 # Demo Dungeon
 
-This is a planned roadmap example, not a supported runtime slice.
+This sample combines supported v1 event rules, state machines, and scenarios.
 
 It demonstrates:
 
-- Key pickup
-- Door unlock
-- Chest reward
-- Goblin AI state machine
-- Goblin death loot
-- Quest start
-- Boss room entry
-- Boss phase transition
-- Boss death exit unlock
 
-Current status: roadmap example. The intended implementation path is Door first, then state machines, then the full dungeon.
+- Key pickup and door unlock
+- Chest reward
+- Goblin state machine transitions
+- Boss phase transition event
+- Exit unlock on boss death
+- Scenario assertions for core flow
+
+Setup:
+
+1. Add `YuspecRuntime` and assign `DemoDungeon.yuspec`.
+2. Add `YuspecEntity` components matching entity types in the spec.
+3. Emit interaction and combat events from your gameplay bridge.
+4. Use the debugger tabs to inspect events, actions, state, and scenario results.

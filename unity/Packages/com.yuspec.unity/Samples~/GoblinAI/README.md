@@ -1,13 +1,19 @@
 # Goblin AI
 
-This is a planned syntax example, not a supported runtime slice.
+This sample demonstrates supported v1 state machine syntax.
 
 It demonstrates:
 
 - Entity properties
 - `behavior` binding to an entity type
-- State transitions
+- State transitions (`on Trigger -> TargetState`)
 - Repeated `every` actions
-- State entry actions through `do`
+- State entry and `do` actions
+- Scenario block parsing
 
-Current status: roadmap example. State machines are planned after the Door vertical slice.
+Setup:
+
+1. Add `YuspecRuntime` and assign `GoblinAI.yuspec`.
+2. Add a Goblin GameObject with `YuspecEntity` (`EntityType = Goblin`).
+3. Emit `Goblin.PlayerSeen`, `Goblin.InAttackRange`, and `Goblin.PlayerOutOfRange`.
+4. Open `Window > YUSPEC > Debugger > State Machines` and observe transitions.
