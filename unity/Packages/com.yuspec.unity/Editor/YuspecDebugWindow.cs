@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using Yuspec.Unity;
 using UnityEditor;
 using UnityEngine;
@@ -168,43 +168,6 @@ namespace Yuspec.Unity.Editor
             }
         }
 
-        private static void DrawRegisteredActions(YuspecRuntime runtime)
-        {
-            DrawSection("Registered Actions");
-            foreach (var action in runtime.ActionRegistry.RegisteredActions.OrderBy(action => action.Name))
-            {
-                EditorGUILayout.LabelField(action.ToString());
-            }
-        }
-
-        private static void DrawParsedHandlers(YuspecRuntime runtime)
-        {
-            DrawSection("Parsed Handlers");
-            foreach (var handler in runtime.CompiledSpecs.SelectMany(spec => spec.EventHandlers))
-            {
-                var target = string.IsNullOrWhiteSpace(handler.TargetType) ? string.Empty : $" with {handler.TargetType}";
-                EditorGUILayout.LabelField($"{handler.EventName}{target} actions={handler.Actions.Count}");
-            }
-        }
-
-        private static void DrawSceneEntities(YuspecRuntime runtime)
-        {
-            DrawSection("Scene Entities");
-            foreach (var entity in runtime.Entities.OrderBy(entity => entity.EntityId))
-            {
-                EditorGUILayout.LabelField($"{entity.EntityId} type={entity.EntityType} state={entity.CurrentState}");
-                foreach (var property in entity.Properties.OrderBy(property => property.Key))
-                {
-                    EditorGUILayout.LabelField($"  {property.Key}", FormatValue(property.Value));
-                }
-            }
-        }
-
-        private static void DrawRecentEvents(YuspecRuntime runtime)
-        {
-            DrawSection("Recent Events");
-            foreach (var yuspecEvent in runtime.RecentEvents.Reverse())
-            {
         private static void DrawEntities(YuspecRuntime runtime)
         {
             DrawSection("Entities");
@@ -234,12 +197,12 @@ namespace Yuspec.Unity.Editor
         }
 
         private static void DrawActions(YuspecRuntime runtime)
-            }
-            DrawSection("Registered Actions");
-
-        private static void DrawDebugTrace(YuspecRuntime runtime)
         {
-            DrawSection("Debug Trace");
+            DrawSection("Registered Actions");
+            foreach (var action in runtime.ActionRegistry.RegisteredActions.OrderBy(action => action.Name))
+            {
+                EditorGUILayout.LabelField(action.ToString());
+            }
 
             DrawSection("Parsed Event Handlers");
             foreach (var handler in runtime.CompiledSpecs.SelectMany(spec => spec.EventHandlers))
@@ -247,13 +210,13 @@ namespace Yuspec.Unity.Editor
                 var target = string.IsNullOrWhiteSpace(handler.TargetType) ? string.Empty : $" with {handler.TargetType}";
                 EditorGUILayout.LabelField($"{handler.EventName}{target} actions={handler.Actions.Count}");
             }
-            if (!runtime.TraceEntries.Any())
-            {
+        }
+
         private static void DrawStateMachines(YuspecRuntime runtime)
-                return;
+        {
             DrawSection("State Machines");
             if (!runtime.StateMachineStatuses.Any())
-            foreach (var trace in runtime.TraceEntries.Reverse())
+            {
                 EditorGUILayout.LabelField("No active state machine sessions.");
             }
 
@@ -262,23 +225,23 @@ namespace Yuspec.Unity.Editor
                 EditorGUILayout.LabelField($"{status.EntityId} [{status.BehaviorName}]", status.CurrentState);
                 EditorGUILayout.LabelField("  Elapsed", status.StateElapsed.ToString("0.000"));
             }
-        }
+
             DrawSection("Behavior Definitions");
             foreach (var behavior in runtime.CompiledSpecs.SelectMany(spec => spec.Behaviors))
-            foreach (var entity in runtime.Entities.Where(entity => !string.IsNullOrEmpty(entity.CurrentState)))
+            {
                 EditorGUILayout.LabelField($"{behavior.Name} for {behavior.EntityType}", EditorStyles.boldLabel);
                 foreach (var state in behavior.States)
-            }
+                {
                     EditorGUILayout.LabelField($"  state {state.Name}");
+                }
+            }
+        }
 
-        private static void DrawPlaceholderSections()
-        {
-            DrawSection("Loaded Specs (Planned)");
         private static void DrawScenarios(YuspecRuntime runtime)
-            DrawSection("Diagnostics (Planned)");
+        {
             DrawSection("Scenario Results");
             if (!runtime.ScenarioResults.Any())
-            EditorGUILayout.LabelField("No runtime action registry.");
+            {
                 EditorGUILayout.LabelField("No scenario run yet. Use Run Scenarios button.");
             }
 
@@ -290,11 +253,11 @@ namespace Yuspec.Unity.Editor
                 {
                     EditorGUILayout.LabelField($"  {result.Message}", EditorStyles.wordWrappedLabel);
                 }
-            EditorGUILayout.LabelField("No parsed handlers.");
-            EditorGUILayout.LabelField("No scene entities.");
+            }
+
             DrawSection("Scenario Definitions");
             foreach (var scenario in runtime.CompiledSpecs.SelectMany(spec => spec.Scenarios))
-            DrawSection("Current States (Not implemented yet)");
+            {
                 EditorGUILayout.LabelField(scenario.Name, EditorStyles.boldLabel);
                 foreach (var step in scenario.GivenSteps)
                 {
@@ -310,13 +273,44 @@ namespace Yuspec.Unity.Editor
                 {
                     EditorGUILayout.LabelField($"  expect {step.Text}");
                 }
-
+            }
         }
-        private static void DrawSection(string title)
+
         private void DrawSettings(YuspecRuntime runtime)
         {
             DrawSection("Settings");
             EditorGUILayout.LabelField("Strict Mode", runtime.StrictMode ? "Enabled" : "Disabled");
             autoRefresh = EditorGUILayout.Toggle("Auto Refresh", autoRefresh);
+        }
 
+        private static void DrawSection(string title)
+        {
+            EditorGUILayout.Space(8);
+            EditorGUILayout.LabelField(title, EditorStyles.boldLabel);
+        }
 
+        private static string FormatValue(object value)
+        {
+            if (value == null)
+            {
+                return "null";
+            }
+
+            if (value is System.Collections.IEnumerable values && !(value is string))
+            {
+                return string.Join(", ", values.Cast<object>().Select(item => item?.ToString() ?? "null"));
+            }
+
+            return value.ToString();
+        }
+
+        private static YuspecRuntime FindRuntime()
+        {
+#if UNITY_2023_1_OR_NEWER
+            return FindFirstObjectByType<YuspecRuntime>();
+#else
+            return FindObjectOfType<YuspecRuntime>();
+#endif
+        }
+    }
+}
