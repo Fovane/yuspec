@@ -4,38 +4,45 @@ YUSPEC is a text-based gameplay rule layer for Unity.
 
 Tagline: Write gameplay rules, not script spaghetti.
 
-Current status: `YUSPEC Unity v1.0.1 Public Preview`.
+Current status: `YUSPEC Unity v1.1.0 Public Preview`.
 
 Install via Unity Package Manager:
 
 ```json
-"com.yuspec.unity": "https://github.com/Fovane/yuspec.git?path=/unity/Packages/com.yuspec.unity#v1.0.1"
+"com.yuspec.unity": "https://github.com/Fovane/yuspec.git?path=/unity/Packages/com.yuspec.unity#v1.1.0"
 ```
 
-Release notes: [docs/releases/v1.0.1.md](../../../docs/releases/v1.0.1.md)
+Release notes: [docs/releases/v1.1.0.md](../../../docs/releases/v1.1.0.md)
 
 Root README: [README.md](../../../README.md)
 
-This package targets the `v1.0.1 Public Preview` workflow:
+This package targets the `v1.1.0 Public Preview` workflow:
 
 - Install package
 - Add `YuspecRuntime` to scene
 - Attach `YuspecEntity` to GameObjects
 - Author `.yuspec` files for gameplay rules
 - Bind custom C# actions via `[YuspecAction]`
+- Use typed entity properties and typed action arguments
+- Bind initial values from ScriptableObject assets with `from`
+- Add lightweight dialogue blocks through `start_dialogue`
 - Debug events, entities, actions, states, and scenarios
 - Run scenario checks from debugger
-- Hot reload changed assigned specs while iterating
+- Hot reload changed `.yuspec` files while preserving entity values
 
 This package currently provides the Unity-facing scaffold:
 
 - Runtime entity and event bridge components
 - Event-rule execution runtime
 - Reflection-based action registry
-- Strict diagnostics
+- Strict diagnostics with clickable Unity Console output
+- Typed property validation
+- Static analysis for cycles, repeated re-trigger loops, and unreachable states
+- ScriptableObject binding through `from` and `[YuspecMutable]`
+- Lightweight dialogue runtime
 - Behavior/state machine parsing and runtime
 - Scenario parser and runner
-- Poll-based hot reload for assigned spec assets
+- FileSystemWatcher-based hot reload
 - Spec asset importer
 - Editor debugger tabs
 - Sample `.yuspec` files
@@ -83,33 +90,35 @@ public void PlayAnimation(YuspecEntity target, string animationName)
 
 Custom actions are discovered from loaded assemblies and invoked by name.
 
-## Supported v1 Syntax Areas
+## Supported v1.1 Syntax Areas
 
-- Entity declarations and properties
+- Entity declarations and typed properties
 - Event handlers with optional `with` and `when`
 - Action calls and `set` assignments
 - Behavior/state blocks with transitions and `every` blocks
 - Scenario blocks with `given`, `when`, and `expect`
+- ScriptableObject binding with `from`
+- Dialogue blocks with `line`, `choice`, `end`, and `start_dialogue`
 - `//` and `#` comments
 
 ## Known Limitations
 
-- YUSPEC Unity v1.0.1 is a public preview release.
+- YUSPEC Unity v1.1.0 is a public preview release.
 - State machine support is a working subset.
 - Scenario tests are a working subset.
-- Hot reload is a working subset.
+- Hot reload does not attempt live scene migration.
 - The package has been validated on the documented Unity version, but wider Unity version coverage still needs community testing.
 - It is not a replacement for Unity, all C#, physics systems, networking internals, shaders, animation authoring, or visual node editing.
 
 ## Hot Reload
 
-`YuspecRuntime` can poll assigned `TextAsset` and `YuspecSpecAsset` entries for
-content changes. When a changed spec is detected, the runtime reloads specs,
-re-applies declarations to registered entities, rebuilds state machine sessions,
-and emits diagnostic `YSP0600`.
+`YuspecRuntime` watches `.yuspec` files for save events and queues reload work
+back onto Unity's main thread. When a changed spec is detected, the runtime
+re-parses and re-validates the changed file, updates affected handlers and state
+machines, preserves current entity property values, and logs the reload result.
 
-This is a v1 subset. It is not a full live migration system and does not
-preserve scenario results or trace history across reload.
+This is not a full live scene migration system and does not preserve scenario
+results or trace history across reload.
 
 ## Notes
 
