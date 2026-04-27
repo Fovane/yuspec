@@ -1,0 +1,29 @@
+entity Player {
+    health: int = 100
+    maxHealth: int = 100
+    attack: int = 10
+    moveSpeed: float = 4.0
+    moveX: float = 0.0
+    moveY: float = 0.0
+    interactRange: float = 1.6
+    alive: bool = true
+    room: string = "Room1"
+    inventory: string[] = []
+}
+
+on Player.Move:
+    move_player Player
+
+on Player.EnterRoom2 with Room2:
+    set Player.room = "Room2"
+    spawn_enemy Goblin
+    show_ui_message "Room 2: a goblin blocks the way."
+    emit "Goblin.PlayerSeen" Goblin
+
+scenario "locked door stays closed without key" {
+    given Player inventory = []
+    given DoorRoom1ToRoom2 state = Closed
+    given DoorRoom1ToRoom2 locked = true
+    when Player.Interact DoorRoom1ToRoom2
+    expect DoorRoom1ToRoom2.state == Closed
+}

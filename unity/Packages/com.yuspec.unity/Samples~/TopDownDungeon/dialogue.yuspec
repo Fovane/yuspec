@@ -1,0 +1,11 @@
+dialogue "MerchantGreeting" for Merchant {
+    line "Welcome to the dungeon outpost."
+    line "The chest beside me holds the first key."
+    line "Bring back the BossKey if you survive."
+    choice "I am ready." -> end
+}
+
+dialogue "BossIntro" for Boss {
+    line "You should not have opened that door."
+    choice "Fight." -> end
+}

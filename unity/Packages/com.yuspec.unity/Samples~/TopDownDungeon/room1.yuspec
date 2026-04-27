@@ -1,0 +1,58 @@
+entity Chest {
+    state: string = "Closed"
+    reward: string = "Room2Key"
+    opened: bool = false
+    locked: bool = false
+}
+
+entity DoorRoom1ToRoom2 {
+    state: string = "Closed"
+    key: string = "Room2Key"
+    locked: bool = true
+    destination: string = "Room2"
+}
+
+entity Merchant {
+    state: string = "Idle"
+    merchantId: string = "room1_merchant"
+    friendly: bool = true
+    talkedTo: bool = false
+}
+
+on Player.Interact with Chest when Chest.state == Closed:
+    set Chest.state = Open
+    set Chest.opened = true
+    give_item Player Chest.reward
+    play_sound "chest_open"
+    show_ui_message "You found the Room 2 key."
+
+on Player.Interact with DoorRoom1ToRoom2 when Player.has(DoorRoom1ToRoom2.key):
+    open_door DoorRoom1ToRoom2
+    play_sound "door_open"
+    show_ui_message "The door to Room 2 opens."
+
+on Player.Interact with DoorRoom1ToRoom2 when DoorRoom1ToRoom2.locked == true:
+    play_sound "door_locked"
+    show_ui_message "The Room 2 door is locked."
+
+on Player.Interact with Merchant:
+    set Merchant.talkedTo = true
+    start_dialogue "MerchantGreeting"
+
+scenario "chest gives key" {
+    given Player inventory = []
+    given Chest state = Closed
+    given Chest opened = false
+    when Player.Interact Chest
+    expect Chest.state == Open
+    expect Player.inventory == ["Room2Key"]
+}
+
+scenario "door opens with key" {
+    given Player inventory = []
+    given Player has "Room2Key"
+    given DoorRoom1ToRoom2 state = Closed
+    given DoorRoom1ToRoom2 locked = true
+    when Player.Interact DoorRoom1ToRoom2
+    expect DoorRoom1ToRoom2.state == Open
+}

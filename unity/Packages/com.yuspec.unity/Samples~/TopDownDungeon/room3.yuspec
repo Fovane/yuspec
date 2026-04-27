@@ -1,0 +1,81 @@
+entity BossRoom {
+    state: string = "Locked"
+    visited: bool = false
+    dangerLevel: int = 2
+}
+
+entity Boss {
+    state: string = "Phase1"
+    health: int = 120
+    phase2Threshold: int = 60
+    damage: int = 15
+    alive: bool = true
+    defeated: bool = false
+    tags: string[] = ["enemy", "boss"]
+}
+
+entity ExitDoor {
+    state: string = "Closed"
+    locked: bool = true
+    destination: string = "Exit"
+}
+
+on Player.EnterBossRoom with BossRoom:
+    set Player.room = "BossRoom"
+    set BossRoom.state = Open
+    set BossRoom.visited = true
+    play_sound "boss_theme"
+    start_dialogue "BossIntro"
+
+on Player.Interact with Boss:
+    take_damage Boss by Player.attack
+    play_sound "boss_hit"
+    emit "Boss.CheckHealth" Boss
+
+on Boss.Died:
+    open_door ExitDoor
+    play_sound "exit_open"
+    show_ui_message "The exit door opens."
+
+behavior BossAI for Boss {
+    state Phase1 {
+        every 1s:
+            take_damage Player by Boss.damage
+
+        on self.health <= 0 -> Dead
+        on self.health <= 60 -> Phase2
+    }
+
+    state Phase2 {
+        on enter:
+            play_sound "boss_phase_2"
+            show_ui_message "Boss enters Phase 2."
+
+        every 0.75s:
+            take_damage Player by Boss.damage
+
+        on self.health <= 0 -> Dead
+    }
+
+    state Dead {
+        on enter:
+            set Boss.alive = false
+            set Boss.defeated = true
+            emit "Boss.Died" Boss
+            destroy_entity Boss
+    }
+}
+
+scenario "boss enters Phase2" {
+    given Boss health = 60
+    when Boss.CheckHealth
+    expect Boss.state == Phase2
+}
+
+scenario "exit door opens on boss death" {
+    given Boss health = 0
+    given ExitDoor state = Closed
+    given ExitDoor locked = true
+    when Boss.CheckHealth
+    expect ExitDoor.state == Open
+}

@@ -1,0 +1,79 @@
+entity Room2 {
+    state: string = "Quiet"
+    cleared: bool = false
+    encounter: string = "Goblin"
+}
+
+entity Goblin {
+    state: string = "Idle"
+    health: int = 30
+    damage: int = 8
+    chaseSpeed: float = 2.5
+    attackRange: float = 1.2
+    alive: bool = true
+    spawned: bool = false
+    drops: string = "BossKey"
+    tags: string[] = ["enemy", "goblin"]
+}
+
+entity DoorRoom2ToBossRoom {
+    state: string = "Closed"
+    key: string = "BossKey"
+    locked: bool = true
+    destination: string = "BossRoom"
+}
+
+on Player.Interact with Goblin:
+    take_damage Goblin by Player.attack
+    play_sound "goblin_hit"
+    emit "Goblin.CheckHealth" Goblin
+
+on Player.Interact with DoorRoom2ToBossRoom when Player.has(DoorRoom2ToBossRoom.key):
+    open_door DoorRoom2ToBossRoom
+    play_sound "door_open"
+    show_ui_message "The boss room is open."
+
+on Player.Interact with DoorRoom2ToBossRoom when DoorRoom2ToBossRoom.locked == true:
+    play_sound "door_locked"
+    show_ui_message "You need the BossKey."
+
+behavior GoblinAI for Goblin {
+    state Idle {
+        on PlayerSeen -> Chase
+        on self.health <= 0 -> Dead
+    }
+
+    state Chase {
+        every 0.5s:
+            show_ui_message "The goblin is chasing you."
+
+        on InAttackRange -> Attack
+        on PlayerLost -> Idle
+        on self.health <= 0 -> Dead
+    }
+
+    state Attack {
+        every 1s:
+            take_damage Player by Goblin.damage
+            play_sound "goblin_attack"
+
+        on PlayerOutOfRange -> Chase
+        on self.health <= 0 -> Dead
+    }
+
+    state Dead {
+        on enter:
+            set Goblin.alive = false
+            set Room2.cleared = true
+            give_item Player Goblin.drops
+            play_sound "goblin_dead"
+            show_ui_message "Goblin defeated. BossKey acquired."
+            destroy_entity Goblin
+    }
+}
+
+scenario "goblin transitions to Dead state on health <= 0" {
+    given Goblin health = 0
+    when Goblin.CheckHealth
+    expect Goblin.state == Dead
+}

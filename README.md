@@ -197,6 +197,73 @@ public void PlayAnimation(YuspecEntity target, string animationName)
 
 Gameplay designers and programmers can then orchestrate those actions in text.
 
+## Why YUSPEC? / Neden YUSPEC?
+
+The `TopDownDungeon` and `PureCSharpDungeon` samples implement the same small
+top-down dungeon:
+
+- Player movement, health, and inventory
+- Three rooms connected by locked doors
+- Chest key pickup
+- Merchant dialogue
+- Goblin Chase/Attack/Dead state machine
+- Boss Phase1/Phase2/Dead state machine
+- Exit door opening on boss death
+- Scenario checks for the core gameplay rules
+
+The difference is where the gameplay logic lives.
+
+| Concern | YUSPEC demo | Pure C# demo |
+|---|---|---|
+| Entity data | Typed declarations in `.yuspec` | Fields spread across C# components |
+| Chest rule | `on Player.Interact with Chest` | `switch` branch plus mutation code |
+| Locked door rule | Declarative `when Player.has(Door.key)` | Manual inventory check in C# |
+| Goblin AI | `behavior GoblinAI for Goblin` | Timer/state code in `Update()` |
+| Boss phases | State transitions in `room3.yuspec` | Health thresholds and method calls in C# |
+| Dialogue | `dialogue` block | Hard-coded log arrays/branches |
+| Scenario tests | `scenario { given / when / expect }` | Custom C# test helper methods |
+| Error surface | YUSPEC diagnostics with file/line/column | Compiler/runtime errors tied to scripts |
+| Hot reload | Change `.yuspec`, runtime reloads changed file | Recompile scripts or enter play mode again |
+| Designer review | Read gameplay rules as text | Read C# control flow |
+
+In the YUSPEC version, the rule surface is split by concern:
+
+```text
+Samples~/TopDownDungeon/player.yuspec
+Samples~/TopDownDungeon/room1.yuspec
+Samples~/TopDownDungeon/room2.yuspec
+Samples~/TopDownDungeon/room3.yuspec
+Samples~/TopDownDungeon/dialogue.yuspec
+```
+
+The C# stays deliberately thin:
+
+```text
+YuspecDemoBootstrapper.cs  - scene setup and runtime registration
+YuspecDemoInput.cs         - WASD/Space input bridge
+YuspecUnityActions.cs      - reusable Unity action bindings
+```
+
+In the pure C# version, the same gameplay rules become script logic:
+
+```text
+Samples~/PureCSharpDungeon/Scripts/PureCSharpDungeonGame.cs
+Samples~/PureCSharpDungeon/Scripts/PureCSharpDungeonEntity.cs
+Samples~/PureCSharpDungeon/Scripts/PureCSharpDungeonInput.cs
+```
+
+That is fine for a tiny demo, but the shape does not scale well. A new door,
+enemy phase, quest condition, or dialogue branch usually means editing compiled
+C# code, adding more branches, and re-testing logic that is mixed with Unity
+object setup. YUSPEC keeps the same orchestration in data-like gameplay files,
+while C# remains the integration layer for input, movement, audio, UI, and other
+engine-specific work.
+
+The practical advantage is not that YUSPEC removes C#. It narrows C# to stable
+verbs such as `open_door`, `give_item`, `take_damage`, and `show_ui_message`,
+then lets gameplay rules compose those verbs in readable files with strict
+diagnostics and scenario checks.
+
 ## Verified Vertical Slice: Door + Chest
 
 The core working slice is intentionally concrete:

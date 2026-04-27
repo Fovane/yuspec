@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -6,6 +7,132 @@ namespace Yuspec.Unity
 {
     public static class YuspecUnityActions
     {
+        public static event Action<string> UiMessage;
+
+        [YuspecAction("move_player")]
+        public static void MovePlayer(YuspecEntity player)
+        {
+            if (player == null)
+            {
+                return;
+            }
+
+            var moveX = ReadFloat(player, "moveX", 0f);
+            var moveY = ReadFloat(player, "moveY", 0f);
+            var speed = ReadFloat(player, "moveSpeed", 4f);
+            var direction = new Vector3(moveX, 0f, moveY);
+            if (direction.sqrMagnitude > 1f)
+            {
+                direction.Normalize();
+            }
+
+            player.transform.position += direction * speed * Time.deltaTime;
+            if (direction.sqrMagnitude > 0.0001f)
+            {
+                player.transform.forward = direction;
+            }
+        }
+
+        [YuspecAction("take_damage")]
+        public static void TakeDamage(YuspecEntity target, string byKeyword, int amount)
+        {
+            if (target == null)
+            {
+                return;
+            }
+
+            var current = ReadInt(target, "health", 0);
+            var next = Mathf.Max(0, current - Mathf.Max(0, amount));
+            target.SetProperty("health", next);
+            target.SetProperty("alive", next > 0);
+            Debug.Log($"YUSPEC take_damage '{target.EntityId}' {byKeyword} {amount} -> {next}.");
+        }
+
+        [YuspecAction("open_door")]
+        public static void OpenDoor(YuspecEntity door)
+        {
+            if (door == null)
+            {
+                return;
+            }
+
+            door.SetProperty("state", "Open");
+            door.SetProperty("locked", false);
+            var collider = door.GetComponent<Collider>();
+            if (collider != null)
+            {
+                collider.isTrigger = true;
+            }
+
+            var renderer = door.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                renderer.material.color = Color.green;
+            }
+
+            Debug.Log($"YUSPEC open_door '{door.EntityId}'.");
+        }
+
+        [YuspecAction("give_item")]
+        public static void GiveItem(YuspecEntity target, string itemId)
+        {
+            Give(target, itemId);
+        }
+
+        [YuspecAction("spawn_enemy")]
+        public static void SpawnEnemy(YuspecEntity enemy)
+        {
+            if (enemy == null)
+            {
+                return;
+            }
+
+            enemy.gameObject.SetActive(true);
+            enemy.SetProperty("spawned", true);
+            enemy.SetProperty("alive", true);
+            Debug.Log($"YUSPEC spawn_enemy '{enemy.EntityId}'.");
+        }
+
+        [YuspecAction("destroy_entity")]
+        public static void DestroyEntityForDemo(YuspecEntity target)
+        {
+            if (target == null)
+            {
+                return;
+            }
+
+            target.SetProperty("destroyed", true);
+            target.SetProperty("alive", false);
+            foreach (var renderer in target.GetComponentsInChildren<Renderer>())
+            {
+                renderer.enabled = false;
+            }
+
+            foreach (var collider in target.GetComponentsInChildren<Collider>())
+            {
+                collider.enabled = false;
+            }
+
+            Debug.Log($"YUSPEC destroy_entity '{target.EntityId}'.");
+        }
+
+        [YuspecAction("show_ui_message")]
+        public static void ShowUiMessage(string message)
+        {
+            UiMessage?.Invoke(message);
+            Debug.Log($"YUSPEC ui '{message}'.");
+        }
+
+        [YuspecAction("start_dialogue")]
+        public static void StartDialogueFallback(string dialogueName)
+        {
+            var runtime = FindRuntime();
+            var dialogue = runtime?.CompiledSpecs
+                .SelectMany(spec => spec.Dialogues)
+                .FirstOrDefault(candidate => string.Equals(candidate.Name, dialogueName, StringComparison.OrdinalIgnoreCase));
+            runtime?.DialogueRuntime?.StartDialogue(dialogue, null);
+        }
+
         [YuspecAction("play_animation")]
         public static void PlayAnimation(YuspecEntity target, string animationName)
         {
@@ -140,6 +267,35 @@ namespace Yuspec.Unity
 
             target.CurrentState = stateName;
             Debug.Log($"YUSPEC set_state '{target.EntityId}' -> '{stateName}'.");
+        }
+
+        private static int ReadInt(YuspecEntity entity, string propertyName, int fallback)
+        {
+            if (entity.TryGetProperty(propertyName, out var value) && int.TryParse(value?.ToString(), out var parsed))
+            {
+                return parsed;
+            }
+
+            return fallback;
+        }
+
+        private static float ReadFloat(YuspecEntity entity, string propertyName, float fallback)
+        {
+            if (entity.TryGetProperty(propertyName, out var value) && float.TryParse(value?.ToString(), out var parsed))
+            {
+                return parsed;
+            }
+
+            return fallback;
+        }
+
+        private static YuspecRuntime FindRuntime()
+        {
+#if UNITY_2023_1_OR_NEWER
+            return UnityEngine.Object.FindFirstObjectByType<YuspecRuntime>();
+#else
+            return UnityEngine.Object.FindObjectOfType<YuspecRuntime>();
+#endif
         }
     }
 }

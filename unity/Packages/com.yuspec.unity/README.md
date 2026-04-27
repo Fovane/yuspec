@@ -78,6 +78,35 @@ This package currently provides the Unity-facing scaffold:
 4. Trigger `Player.Interact` through the runtime or bridge component.
 5. Open `Window > YUSPEC > Debugger` and confirm the event trace and state updates.
 
+## Top-Down Dungeon Demo
+
+`Samples~/TopDownDungeon` is a primitive-only showcase demo for v1.1.0. It keeps
+gameplay rules in `.yuspec` files and uses C# only for Unity input, primitive
+scene setup, and bound action execution.
+
+Included specs:
+
+- `player.yuspec`
+- `room1.yuspec`
+- `room2.yuspec`
+- `room3.yuspec`
+- `dialogue.yuspec`
+
+Included scripts:
+
+- `YuspecDemoBootstrapper.cs`
+- `YuspecDemoInput.cs`
+
+## Pure C# Comparison Demo
+
+`Samples~/PureCSharpDungeon` implements the same primitive dungeon without
+YUSPEC. It exists as a comparison sample: the same chest, door, dialogue,
+Goblin, Boss, and scenario logic is encoded directly in C# branches, timers, and
+state mutation methods.
+
+Use it beside `TopDownDungeon` when evaluating what YUSPEC removes from ordinary
+Unity gameplay scripts.
+
 ## Bind A Custom Action
 
 ```csharp
