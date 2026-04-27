@@ -187,14 +187,24 @@ namespace Yuspec.Unity
         }
 
         [YuspecAction("move_towards")]
-        public static void MoveTowards(YuspecEntity target, string speedKeyword, float speed)
+        public static void MoveTowards(YuspecEntity entity, YuspecEntity target, string speedKeyword, float speed)
         {
-            if (target == null)
+            if (entity == null || target == null)
             {
                 return;
             }
 
-            Debug.Log($"YUSPEC move_towards '{target.EntityId}' {speedKeyword} {speed}.");
+            var currentPosition = entity.transform.position;
+            var targetPosition = target.transform.position;
+            entity.transform.position = Vector3.MoveTowards(currentPosition, targetPosition, Mathf.Max(0f, speed) * Time.deltaTime);
+
+            var direction = targetPosition - currentPosition;
+            if (direction.sqrMagnitude > 0.0001f)
+            {
+                entity.transform.forward = direction.normalized;
+            }
+
+            Debug.Log($"YUSPEC move_towards '{entity.EntityId}' -> '{target.EntityId}' {speedKeyword} {speed}.");
         }
 
         [YuspecAction("damage")]
