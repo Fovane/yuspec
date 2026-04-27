@@ -80,7 +80,7 @@ This package currently provides the Unity-facing scaffold:
 
 ## Top-Down Dungeon Demo
 
-`Samples~/TopDownDungeon` is a primitive-only showcase demo for v1.1.0. It keeps
+`Samples~/TopDownDungeon` is a primitive-only showcase demo for v1.1.1. It keeps
 gameplay rules in `.yuspec` files and uses C# only for Unity input, primitive
 scene setup, and bound action execution.
 

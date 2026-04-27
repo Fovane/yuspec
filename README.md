@@ -107,7 +107,7 @@ Add this dependency to your Unity project's `Packages/manifest.json`:
 "com.yuspec.unity": "https://github.com/Fovane/yuspec.git?path=/unity/Packages/com.yuspec.unity#v1.1.1"
 ```
 
-Release notes: [CHANGELOG.md](CHANGELOG.md)
+Release notes: [docs/releases/v1.1.1.md](docs/releases/v1.1.1.md)
 
 ## VS Code Extension
 
@@ -295,7 +295,7 @@ See:
 
 `unity/Packages/com.yuspec.unity/Samples~/DoorExample/`
 
-This is the intended manually testable slice for the v1.1.0 public preview package.
+This is the intended manually testable slice for the v1.1.1 public preview package.
 
 ```yuspec
 entity Player {
@@ -457,7 +457,7 @@ See [docs/strict-mode.md](docs/strict-mode.md) for the current split between imp
 
 ## Visual Debugging
 
-The YUSPEC Debugger shows the runtime surface needed for v1.1.0 iteration:
+The YUSPEC Debugger shows the runtime surface needed for v1.1.1 iteration:
 
 - Loaded specs
 - Parse errors
@@ -489,7 +489,7 @@ files, package docs, and a debugger window under:
 Window > YUSPEC > Debugger
 ```
 
-The package is intentionally honest: v1.1.0 is a focused public preview Unity
+The package is intentionally honest: v1.1.1 is a focused public preview Unity
 gameplay rule layer, not a replacement for Unity or C#. The shipped samples
 exercise events, actions, conditions, state machines, scenarios, typed
 properties, dialogue, ScriptableObject binding, hot reload, and debugger trace.
