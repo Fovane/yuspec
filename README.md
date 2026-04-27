@@ -197,7 +197,7 @@ public void PlayAnimation(YuspecEntity target, string animationName)
 
 Gameplay designers and programmers can then orchestrate those actions in text.
 
-## Why YUSPEC? / Neden YUSPEC?
+## Why YUSPEC?
 
 The `TopDownDungeon` and `PureCSharpDungeon` samples implement the same small
 top-down dungeon:
@@ -212,6 +212,20 @@ top-down dungeon:
 - Scenario checks for the core gameplay rules
 
 The difference is where the gameplay logic lives.
+
+Measured in the current repository, the YUSPEC gameplay rule surface is 221
+lines across five `.yuspec` files. The equivalent pure C# sample is 628 lines
+across three C# scripts. The YUSPEC sample also has 309 lines of C# bridge code
+for primitive scene setup and input, but that code is deliberately infrastructure:
+the gameplay rules remain in text files, and the reusable action bindings can be
+shared by other demos.
+
+| Concern | YUSPEC demo | Pure C# demo |
+|---|---:|---:|
+| Gameplay rule surface | 221 lines in `.yuspec` | 628 lines in C# scripts |
+| Sample infrastructure | 309 lines of C# for setup/input | Included in the 628 C# lines |
+| Files reviewers read for rules | 5 focused `.yuspec` files | 3 C# scripts with rules, setup, timers, and state mutation |
+| Reusable action vocabulary | Shared `[YuspecAction]` verbs | Demo-specific methods and branches |
 
 | Concern | YUSPEC demo | Pure C# demo |
 |---|---|---|
@@ -263,6 +277,10 @@ The practical advantage is not that YUSPEC removes C#. It narrows C# to stable
 verbs such as `open_door`, `give_item`, `take_damage`, and `show_ui_message`,
 then lets gameplay rules compose those verbs in readable files with strict
 diagnostics and scenario checks.
+
+The GIF at the top of this README is still the Door+Chest vertical slice. A
+dedicated TopDownDungeon GIF should be captured before the next public marketing
+push so this comparison can show the full three-room demo visually.
 
 ## Verified Vertical Slice: Door + Chest
 
