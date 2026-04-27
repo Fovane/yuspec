@@ -4,19 +4,19 @@ YUSPEC is a text-based gameplay rule layer for Unity.
 
 Tagline: Write gameplay rules, not script spaghetti.
 
-Current status: `YUSPEC Unity v1.1.0 Public Preview`.
+Current status: `YUSPEC Unity v1.1.1 Public Preview`.
 
 Install via Unity Package Manager:
 
 ```json
-"com.yuspec.unity": "https://github.com/Fovane/yuspec.git?path=/unity/Packages/com.yuspec.unity#v1.1.0"
+"com.yuspec.unity": "https://github.com/Fovane/yuspec.git?path=/unity/Packages/com.yuspec.unity#v1.1.1"
 ```
 
-Release notes: [docs/releases/v1.1.0.md](../../../docs/releases/v1.1.0.md)
+Release notes: [docs/releases/v1.1.1.md](../../../docs/releases/v1.1.1.md)
 
 Root README: [README.md](../../../README.md)
 
-This package targets the `v1.1.0 Public Preview` workflow:
+This package targets the `v1.1.1 Public Preview` workflow:
 
 - Install package
 - Add `YuspecRuntime` to scene
@@ -145,7 +145,7 @@ Custom actions are discovered from loaded assemblies and invoked by name.
 
 ## Known Limitations
 
-- YUSPEC Unity v1.1.0 is a public preview release.
+- YUSPEC Unity v1.1.1 is a public preview release.
 - State machine support is a working subset.
 - Scenario tests are a working subset.
 - Hot reload does not attempt live scene migration.

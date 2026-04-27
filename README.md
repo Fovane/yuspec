@@ -10,7 +10,7 @@ C# MonoBehaviour scripts.
 ![YUSPEC Door and Chest demo](docs/assets/yuspec-door-chest-demo-v1.gif)
 
 The current C++ compiler/runtime remains in the repository as the foundation.
-The Unity package is now published as `YUSPEC Unity v1.1.0`: a Unity Package
+The Unity package is now published as `YUSPEC Unity v1.1.1`: a Unity Package
 Manager release with typed entity properties, clickable Unity diagnostics,
 static analysis, ScriptableObject binding, lightweight dialogue, VS Code
 language tooling, and real `.yuspec` hot reload.
@@ -36,7 +36,7 @@ YUSPEC is not:
 
 ## Current Status
 
-YUSPEC Unity v1.1.0 is a public preview release for Unity Package Manager.
+YUSPEC Unity v1.1.1 is a public preview release for Unity Package Manager.
 
 It includes a working gameplay rule runtime, C# action binding, strict
 diagnostics, an Editor debugger, scenario/state-machine subsets, typed
@@ -104,7 +104,7 @@ Still intentionally limited:
 Add this dependency to your Unity project's `Packages/manifest.json`:
 
 ```json
-"com.yuspec.unity": "https://github.com/Fovane/yuspec.git?path=/unity/Packages/com.yuspec.unity#v1.1.0"
+"com.yuspec.unity": "https://github.com/Fovane/yuspec.git?path=/unity/Packages/com.yuspec.unity#v1.1.1"
 ```
 
 Release notes: [CHANGELOG.md](CHANGELOG.md)
@@ -132,7 +132,7 @@ npx @vscode/vsce package
 
 ## Known Limitations
 
-- YUSPEC Unity v1.1.0 is a public preview release.
+- YUSPEC Unity v1.1.1 is a public preview release.
 - State machine support is a working subset.
 - Scenario tests are a working subset.
 - Hot reload does not attempt live scene migration.

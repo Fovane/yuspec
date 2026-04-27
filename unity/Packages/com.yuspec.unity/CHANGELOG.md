@@ -2,6 +2,14 @@
 
 All notable changes to this package are documented in this file.
 
+## 1.1.1 - 2026-04-27
+
+- Fixed the TopDownDungeon goblin chase so `move_towards` moves the active behavior actor toward the target entity.
+- Added range-driven goblin attack events so the player only takes goblin damage while inside attack range.
+- Changed the TopDownDungeon boss to start dormant and activate on boss-room entry, preventing idle damage before the encounter.
+- Added Unity EditMode regression tests for goblin movement and dormant boss damage gating.
+- Validated Unity EditMode tests with Unity 6000.3.8f1: 19 passed, 0 failed.
+
 ## 1.0.1 - 2026-04-27
 
 - Added polling-based hot reload for assigned `TextAsset` and `YuspecSpecAsset` specs.
