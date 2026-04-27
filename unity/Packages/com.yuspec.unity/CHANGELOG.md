@@ -2,6 +2,14 @@
 
 All notable changes to this package are documented in this file.
 
+## 1.0.1 - 2026-04-27
+
+- Added polling-based hot reload for assigned `TextAsset` and `YuspecSpecAsset` specs.
+- Added hot reload diagnostics and debugger settings display.
+- Fixed `YuspecEventBridge` to emit parser-compatible event names.
+- Added runtime tests for hot reload and event bridge zone emission.
+- Added `docs/v1-readiness-audit.md` with the v1.0 readiness audit.
+
 ## 1.0.0 - 2026-04-27
 
 - Added parser support for event rules, behaviors/state blocks, scenario blocks, and comments.

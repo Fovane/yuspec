@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unity 1.0.1] - 2026-04-27
+
+### Added
+- Polling-based hot reload for assigned Unity spec assets.
+- Hot reload diagnostics and debugger visibility.
+- v1 readiness audit document.
+
+### Fixed
+- Unity event bridge now emits parser-compatible event names.
+- Added tests for hot reload and event bridge zone emission.
+
 ## [Unity 1.0.0] - 2026-04-27
 
 ### Added
