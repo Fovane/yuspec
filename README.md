@@ -10,9 +10,10 @@ C# MonoBehaviour scripts.
 ![YUSPEC Door and Chest demo](docs/assets/yuspec-door-chest-demo-v1.gif)
 
 The current C++ compiler/runtime remains in the repository as the foundation.
-The Unity package is now published as `YUSPEC Unity v1.0.1 Public Preview`: a
-first public Unity Package Manager release for experimentation, prototypes,
-small Unity projects, and feedback from Unity developers.
+The Unity package is now published as `YUSPEC Unity v1.1.0`: a Unity Package
+Manager release with typed entity properties, clickable Unity diagnostics,
+static analysis, ScriptableObject binding, lightweight dialogue, VS Code
+language tooling, and real `.yuspec` hot reload.
 
 ## What YUSPEC Is
 
@@ -35,11 +36,12 @@ YUSPEC is not:
 
 ## Current Status
 
-YUSPEC Unity v1.0.1 is a public preview release for Unity Package Manager.
+YUSPEC Unity v1.1.0 is a public preview release for Unity Package Manager.
 
 It includes a working gameplay rule runtime, C# action binding, strict
-diagnostics, an Editor debugger, scenario/state-machine subsets, hot reload
-subset, and sample gameplay flows.
+diagnostics, an Editor debugger, scenario/state-machine subsets, typed
+properties, static analysis, ScriptableObject binding, dialogue blocks, real
+hot reload, VS Code language tooling, and sample gameplay flows.
 
 It is ready for experimentation, prototypes, small Unity projects, and feedback
 from Unity developers. It is not yet battle-tested across large production
@@ -48,15 +50,20 @@ games.
 Currently included:
 
 - Unity package scaffold with runtime, editor, samples, docs, and tests
-- Entity declarations and property bags
+- Entity declarations and typed property bags
 - Event handlers with optional `with` target and `when` condition
 - Conditions for inventory-style `has`, equality, and state transitions
 - C# action binding through `[YuspecAction]`
+- Typed action arguments for `int`, `float`, `bool`, `string`, and `string[]`
 - Built-in `set` plus common Unity-facing action stubs
 - Behavior/state machine blocks with transitions, enter/exit/do actions, and `every` intervals
 - Scenario tests with `given` / `when` / `expect`
-- Runtime diagnostics and debugger trace
-- Poll-based hot reload for assigned spec assets
+- Runtime diagnostics, clickable Unity Console errors, and debugger trace
+- Static analysis for cycles, repeated re-trigger loops, and unreachable states
+- ScriptableObject binding through `from` and guarded write-back via `[YuspecMutable]`
+- Lightweight `dialogue` blocks with `start_dialogue`
+- FileSystemWatcher-based hot reload for changed `.yuspec` files
+- VS Code extension for `.yuspec` editing
 - Door+Chest and Demo Dungeon samples
 
 Still intentionally limited:
@@ -64,7 +71,7 @@ Still intentionally limited:
 - No visual graph editor
 - No networking or replication layer
 - No full general-purpose programming model
-- Hot reload is a working subset, not a full asset dependency graph or live scene migration system
+- Hot reload preserves entity values and rebuilds affected runtime registrations, but live scene migration remains out of scope
 - Project-specific actions should still be implemented in C# for real games
 
 ## Feature Status
@@ -83,7 +90,13 @@ Still intentionally limited:
 | Quest/BossPhase samples | Working subset |
 | DemoDungeon sample | Working sample |
 | Scenario tests | Working subset |
-| Hot reload | Working subset |
+| Typed entity properties | Working |
+| Unity Console clickable diagnostics | Working |
+| Static analysis | Working subset |
+| ScriptableObject binding | Working |
+| Dialogue blocks | Working |
+| VS Code extension | Working |
+| Hot reload | Working |
 | Large production game validation | Not yet battle-tested |
 
 ## Install Via UPM
@@ -91,17 +104,38 @@ Still intentionally limited:
 Add this dependency to your Unity project's `Packages/manifest.json`:
 
 ```json
-"com.yuspec.unity": "https://github.com/Fovane/yuspec.git?path=/unity/Packages/com.yuspec.unity#v1.0.1"
+"com.yuspec.unity": "https://github.com/Fovane/yuspec.git?path=/unity/Packages/com.yuspec.unity#v1.1.0"
 ```
 
-Release notes: [docs/releases/v1.0.1.md](docs/releases/v1.0.1.md)
+Release notes: [CHANGELOG.md](CHANGELOG.md)
+
+## VS Code Extension
+
+The VS Code extension lives at:
+
+```text
+tools/vscode-yuspec
+```
+
+It provides syntax highlighting, keyword completion, hover descriptions,
+go-to-definition for entity declarations, bracket matching, and save-time brace
+diagnostics for `.yuspec` files.
+
+Build and package it with:
+
+```bash
+cd tools/vscode-yuspec
+npm install
+npm run compile
+npx @vscode/vsce package
+```
 
 ## Known Limitations
 
-- YUSPEC Unity v1.0.1 is a public preview release.
+- YUSPEC Unity v1.1.0 is a public preview release.
 - State machine support is a working subset.
 - Scenario tests are a working subset.
-- Hot reload is a working subset.
+- Hot reload does not attempt live scene migration.
 - The package has been validated on the documented Unity version, but wider Unity version coverage still needs community testing.
 - It is not a replacement for Unity, all C#, physics systems, networking internals, shaders, animation authoring, or visual node editing.
 
@@ -178,7 +212,7 @@ See:
 
 `unity/Packages/com.yuspec.unity/Samples~/DoorExample/`
 
-This is the intended manually testable slice for the v1.0.1 public preview package.
+This is the intended manually testable slice for the v1.1.0 public preview package.
 
 ```yuspec
 entity Player {
@@ -206,18 +240,20 @@ on Player.Interact with Chest when Chest.state == Closed:
     play_sound "chest_open"
 ```
 
-## Supported v1 Syntax Examples
+## Supported v1.1 Syntax Examples
 
-The following examples show the supported v1 subset. The language remains small
+The following examples show the supported v1.1 subset. The language remains small
 on purpose; C# actions still carry the technical Unity implementation.
 
 ### Goblin AI
 
 ```yuspec
 entity Goblin {
-    health = 30
-    damage = 5
-    drops = "GoldCoin"
+    health: int = 30
+    damage: float = 5.0
+    alive: bool = true
+    drops: string = "GoldCoin"
+    tags: string[] = ["enemy", "goblin"]
 }
 
 behavior GoblinAI for Goblin {
@@ -259,6 +295,34 @@ scenario "door opens with key" {
 }
 ```
 
+### ScriptableObject Binding
+
+```yuspec
+entity PlayerConfig from "Assets/Data/PlayerConfig.asset" {
+    health: int
+    moveSpeed: float
+}
+```
+
+Initial values are read from the referenced Unity asset. Runtime write-back is
+allowed only for fields or properties marked with `[YuspecMutable]`.
+
+### Dialogue
+
+```yuspec
+dialogue "MerchantGreeting" for Merchant {
+    line "Welcome, traveler."
+    choice "What do you sell?" -> MerchantShop
+    choice "Goodbye." -> end
+}
+
+on Player.TalkTo with Merchant:
+    start_dialogue "MerchantGreeting"
+```
+
+Dialogue is handled by `YuspecDialogueRuntime` through C# events for lines,
+choices, and end events. It does not depend on Yarn Spinner.
+
 ### Boss Room Orchestration
 
 ```yuspec
@@ -295,8 +359,13 @@ Implemented now:
 - Duplicate event handler
 - Unreachable state
 - Unknown transition target
+- Type mismatch in typed entity declarations
+- Event handler cycles
+- Repeated interval re-trigger loops
+- ScriptableObject asset/type binding errors
+- Dialogue reference errors
 
-Planned:
+Still planned:
 
 - Typo-based null fallback
 - Richer type inference for entity references and project-specific action args
@@ -305,7 +374,7 @@ See [docs/strict-mode.md](docs/strict-mode.md) for the current split between imp
 
 ## Visual Debugging
 
-The YUSPEC Debugger shows the runtime surface needed for v1.0.1 iteration:
+The YUSPEC Debugger shows the runtime surface needed for v1.1.0 iteration:
 
 - Loaded specs
 - Parse errors
@@ -317,6 +386,7 @@ The YUSPEC Debugger shows the runtime surface needed for v1.0.1 iteration:
 - Executed actions
 - Failed conditions
 - Scenario results
+- Hot reload status and reloaded handler counts
 
 The goal is to answer "which rule controlled this?" directly inside the Unity
 Editor.
@@ -336,10 +406,10 @@ files, package docs, and a debugger window under:
 Window > YUSPEC > Debugger
 ```
 
-The package is intentionally honest: v1.0.1 is a focused public preview Unity
+The package is intentionally honest: v1.1.0 is a focused public preview Unity
 gameplay rule layer, not a replacement for Unity or C#. The shipped samples
-exercise events, actions, conditions, state machines, scenarios, hot reload, and
-debugger trace.
+exercise events, actions, conditions, state machines, scenarios, typed
+properties, dialogue, ScriptableObject binding, hot reload, and debugger trace.
 
 ## Unity Dev Environment
 
@@ -401,12 +471,13 @@ Phase 6: Demo Dungeon
 - Done as package sample: key, locked door, chest, goblin, quest, boss room, boss phase, and exit flow.
 
 Phase 7: Publish readiness
-- In progress: UPM quality, samples, tests, documentation, changelog, license,
-  release tag, demo GIF, and Asset Store preparation.
+- Done for v1.1.0: UPM package, samples, tests, documentation, changelog,
+  release tag, demo GIF, VS Code extension, and Unity 6.3.8f1 validation.
+- Still in progress: Asset Store preparation and broader production feedback.
 
 Phase 8: Hardening
-- Hot reload beyond assigned spec asset polling, richer Unity event payloads,
-  CI automation, and production service bindings.
+- Richer Unity event payloads, CI automation, production service bindings,
+  broader Unity version coverage, and live scene migration research.
 
 ## Build Current CLI
 
