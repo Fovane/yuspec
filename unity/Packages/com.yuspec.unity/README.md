@@ -107,6 +107,19 @@ state mutation methods.
 Use it beside `TopDownDungeon` when evaluating what YUSPEC removes from ordinary
 Unity gameplay scripts.
 
+## Playable GIF Capture Scene
+
+The Unity dev project includes a ready-to-open scene for recording the
+TopDownDungeon demo:
+
+```text
+unity/YuspecUnityDev/Assets/TopDownDungeonDemo/TopDownDungeon.unity
+```
+
+Open it, press Play, move with `WASD`, and interact with `Space`. The scene loads
+the `Samples~/TopDownDungeon` `.yuspec` files from disk and builds the primitive
+dungeon automatically.
+
 ## Bind A Custom Action
 
 ```csharp
