@@ -21,7 +21,7 @@ jobs:
 
           data = json.loads(package.read_text(encoding='utf-8'))
           assert data['name'] == 'com.yuspec.unity'
-          assert data['version'] == '1.1.0'
+          assert data['version'] == '1.1.1'
           assert 'displayName' in data
           assert 'unity' in data
           print('package.json OK')
@@ -31,7 +31,7 @@ jobs:
         run: |
           test -f README.md
           test -f CHANGELOG.md
-          test -f docs/releases/v1.1.0.md
+          test -f docs/releases/v1.1.1.md
           test -f docs/release-checklist.md
           test -f unity/Packages/com.yuspec.unity/README.md
           test -f unity/Packages/com.yuspec.unity/Runtime/YuspecRuntime.cs
