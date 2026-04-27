@@ -75,11 +75,7 @@ The dev project enables `com.unity.test-framework` and marks
 & $UNITY_EDITOR -batchmode -projectPath "<repo-root>\unity\YuspecUnityDev" -runTests -testPlatform editmode -testResults "<repo-root>\unity\YuspecUnityDev-editmode-results.xml" -logFile "<repo-root>\unity\YuspecUnityDev-editmode.log"
 ```
 
-Expected v1.0 result:
-
-```text
-testcasecount="10" result="Passed" total="10" passed="10"
-```
+Expected result: all package tests pass.
 
 ## Manual Debugging
 

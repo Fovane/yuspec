@@ -1,6 +1,6 @@
 # Door Example
 
-This sample demonstrates supported v1 event rules and scenario tests.
+This sample demonstrates supported v1.0.1 public preview event rules and scenario tests.
 
 It demonstrates:
 

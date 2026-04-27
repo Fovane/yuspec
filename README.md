@@ -10,8 +10,9 @@ C# MonoBehaviour scripts.
 ![YUSPEC Door and Chest demo](docs/assets/yuspec-door-chest-demo-v1.gif)
 
 The current C++ compiler/runtime remains in the repository as the foundation.
-The Unity package now targets a v1.0 vertical slice: events, conditions, action
-binding, state machines, scenarios, debugger trace, and a Demo Dungeon sample.
+The Unity package is now published as `YUSPEC Unity v1.0.1 Public Preview`: a
+first public Unity Package Manager release for experimentation, prototypes,
+small Unity projects, and feedback from Unity developers.
 
 ## What YUSPEC Is
 
@@ -34,9 +35,17 @@ YUSPEC is not:
 
 ## Current Status
 
-YUSPEC v1.0 is a Unity Package Manager package candidate.
+YUSPEC Unity v1.0.1 is a public preview release for Unity Package Manager.
 
-Currently working:
+It includes a working gameplay rule runtime, C# action binding, strict
+diagnostics, an Editor debugger, scenario/state-machine subsets, hot reload
+subset, and sample gameplay flows.
+
+It is ready for experimentation, prototypes, small Unity projects, and feedback
+from Unity developers. It is not yet battle-tested across large production
+games.
+
+Currently included:
 
 - Unity package scaffold with runtime, editor, samples, docs, and tests
 - Entity declarations and property bags
@@ -62,17 +71,39 @@ Still intentionally limited:
 
 | Feature | Status |
 |---|---|
-| Unity package scaffold | v1.0 candidate |
-| Entity declarations | Working subset |
-| Event handlers | Working subset |
+| Unity Package Manager package | Public preview |
+| Entity declarations | Working |
+| Event handlers | Working |
 | Conditions | Working subset |
-| C# action binding | Working subset |
-| Debug window | Working subset |
+| C# action binding | Working |
 | Strict diagnostics | Working subset |
-| State machines | Working subset |
+| Editor debugger | Working |
+| Door+Chest sample | Working |
+| GoblinAI state machine sample | Working subset |
+| Quest/BossPhase samples | Working subset |
+| DemoDungeon sample | Working sample |
 | Scenario tests | Working subset |
-| Demo Dungeon | Working sample |
 | Hot reload | Working subset |
+| Large production game validation | Not yet battle-tested |
+
+## Install Via UPM
+
+Add this dependency to your Unity project's `Packages/manifest.json`:
+
+```json
+"com.yuspec.unity": "https://github.com/Fovane/yuspec.git?path=/unity/Packages/com.yuspec.unity#v1.0.1"
+```
+
+Release notes: [docs/releases/v1.0.1.md](docs/releases/v1.0.1.md)
+
+## Known Limitations
+
+- YUSPEC Unity v1.0.1 is a public preview release.
+- State machine support is a working subset.
+- Scenario tests are a working subset.
+- Hot reload is a working subset.
+- The package has been validated on the documented Unity version, but wider Unity version coverage still needs community testing.
+- It is not a replacement for Unity, all C#, physics systems, networking internals, shaders, animation authoring, or visual node editing.
 
 ## The Problem
 
@@ -147,7 +178,7 @@ See:
 
 `unity/Packages/com.yuspec.unity/Samples~/DoorExample/`
 
-This is the intended manually testable slice for the v1.0 package.
+This is the intended manually testable slice for the v1.0.1 public preview package.
 
 ```yuspec
 entity Player {
@@ -274,7 +305,7 @@ See [docs/strict-mode.md](docs/strict-mode.md) for the current split between imp
 
 ## Visual Debugging
 
-The YUSPEC Debugger shows the runtime surface needed for v1.0 iteration:
+The YUSPEC Debugger shows the runtime surface needed for v1.0.1 iteration:
 
 - Loaded specs
 - Parse errors
@@ -305,9 +336,10 @@ files, package docs, and a debugger window under:
 Window > YUSPEC > Debugger
 ```
 
-The package is intentionally honest: v1.0 is a focused Unity gameplay rule
-layer, not a replacement for Unity or C#. The shipped samples exercise events,
-actions, conditions, state machines, scenarios, and debugger trace.
+The package is intentionally honest: v1.0.1 is a focused public preview Unity
+gameplay rule layer, not a replacement for Unity or C#. The shipped samples
+exercise events, actions, conditions, state machines, scenarios, hot reload, and
+debugger trace.
 
 ## Unity Dev Environment
 

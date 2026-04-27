@@ -1,6 +1,6 @@
 # Goblin AI
 
-This sample demonstrates supported v1 state machine syntax.
+This sample demonstrates supported v1.0.1 public preview state machine syntax.
 
 It demonstrates:
 

@@ -33,7 +33,7 @@ paste error output here
 ## Environment
 - OS: [e.g. Windows 11, Ubuntu 22.04, macOS 14]
 - Compiler: [e.g. MSVC 2022, GCC 12, Clang 15]
-- YUSPEC version / commit: [e.g. v1.0.0 or git SHA]
+- YUSPEC version / commit: [e.g. v1.0.1 or git SHA]
 - CMake version:
 
 ## Additional Context

@@ -1,6 +1,6 @@
 # Demo Dungeon
 
-This sample combines supported v1 event rules, state machines, and scenarios.
+This sample combines supported v1.0.1 public preview event rules, state machines, and scenarios.
 
 It demonstrates:
 

@@ -2,7 +2,7 @@
 
 Strict mode is the default target for Unity. A gameplay DSL that silently ignores typos is not useful in real projects.
 
-## Implemented in v1.0
+## Implemented in v1.0.1 Public Preview
 
 - Empty action name
 - Duplicate action binding name

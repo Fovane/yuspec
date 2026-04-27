@@ -1,4 +1,4 @@
-# YUSPEC Unity v1.0 Readiness Audit
+# YUSPEC Unity v1.0.1 Public Preview Readiness Audit
 
 Date: 2026-04-27
 
@@ -29,7 +29,7 @@ Status: ready.
 
 The package contains the expected UPM structure:
 
-- `package.json`: present, valid package manifest, version `1.0.0`
+- `package.json`: present, valid package manifest, version `1.0.1`
 - `Runtime/Yuspec.Runtime.asmdef`: present
 - `Editor/Yuspec.Editor.asmdef`: present, Editor-only
 - `README.md`: present
@@ -254,7 +254,6 @@ Missing or deferred:
 
 ## Release Judgment
 
-YUSPEC Unity v1.0 is ready as a focused Unity package release candidate, as long
-as it is described as a working gameplay rule layer subset rather than a complete
-Unity scripting replacement.
-
+YUSPEC Unity v1.0.1 is ready as a focused public preview Unity package release,
+as long as it is described as a working gameplay rule layer subset rather than a
+complete Unity scripting replacement.
