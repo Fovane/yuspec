@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.1.0 - 2026-04-27
+
+### Added
+- VS Code extension for `.yuspec` files with syntax highlighting, keyword completion, hover, go-to-definition, bracket matching, and save-time brace diagnostics.
+- Unity Console diagnostic reporter with clickable `filename(line,column): error YUSPEC: message` output.
+- Typed entity properties for `int`, `float`, `bool`, `string`, and `string[]`.
+- Static analysis for event cycles, repeated interval re-trigger loops, and unreachable states.
+- ScriptableObject property binding through `from` and guarded write-back via `[YuspecMutable]`.
+- Lightweight dialogue blocks and `YuspecDialogueRuntime` with line, choice, and end events.
+- FileSystemWatcher-based hot reload that reparses changed `.yuspec` files, preserves entity property values, and rebuilds affected runtime registrations on the Unity main thread.
+
 ## [1.0.1] - 2026-04-27
 
 ### Added
