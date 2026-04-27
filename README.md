@@ -278,11 +278,7 @@ verbs such as `open_door`, `give_item`, `take_damage`, and `show_ui_message`,
 then lets gameplay rules compose those verbs in readable files with strict
 diagnostics and scenario checks.
 
-The GIF at the top of this README is still the Door+Chest vertical slice. To
-capture the full three-room TopDownDungeon demo, open
-`unity/YuspecUnityDev/Assets/TopDownDungeonDemo/TopDownDungeon.unity`, press
-Play, and record the primitive scene while moving with WASD and interacting with
-Space.
+![YUSPEC TopDownDungeon demo](docs/assets/yuspec-topdown-dungeon-demo-v1.gif)
 
 ## Verified Vertical Slice: Door + Chest
 
