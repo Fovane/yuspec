@@ -318,3 +318,5 @@ namespace Yuspec.Unity.Editor
             DrawSection("Settings");
             EditorGUILayout.LabelField("Strict Mode", runtime.StrictMode ? "Enabled" : "Disabled");
             autoRefresh = EditorGUILayout.Toggle("Auto Refresh", autoRefresh);
+
+
