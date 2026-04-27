@@ -105,9 +105,37 @@ entity Door {
             var spec = parser.Parse("CommentSpec", source);
 
             Assert.That(spec.Entities.Count, Is.EqualTo(1));
-            var keyValue = spec.Entities[0].Properties["key"];
+            var keyValue = spec.Entities[0].Properties["key"].Value;
             Assert.That(keyValue, Is.EqualTo("Iron#Key"));
             Assert.That(parser.Diagnostics.Any(d => d.severity == YuspecDiagnosticSeverity.Error), Is.False);
+        }
+
+        [Test]
+        public void Parse_TypedPropertiesAndDialogue_BuildsDefinitions()
+        {
+            const string source = @"
+entity Goblin {
+    health: int = 30
+    damage: float = 5.0
+    alive: bool = true
+    drops: string = ""GoldCoin""
+    tags: string[] = [""enemy"", ""goblin""]
+}
+
+dialogue ""MerchantGreeting"" for Goblin {
+    line ""Welcome.""
+    choice ""Goodbye."" -> end
+}
+";
+
+            var parser = new YuspecSpecParser();
+            var spec = parser.Parse("TypedSpec", source);
+
+            Assert.That(parser.Diagnostics.Any(d => d.severity == YuspecDiagnosticSeverity.Error), Is.False);
+            Assert.That(spec.Entities[0].Properties["health"].Type, Is.EqualTo(YuspecPropertyType.Int));
+            Assert.That(spec.Entities[0].Properties["tags"].Type, Is.EqualTo(YuspecPropertyType.StringArray));
+            Assert.That(spec.Dialogues.Count, Is.EqualTo(1));
+            Assert.That(spec.SyntaxTree.Dialogues[0].Entries.Count, Is.EqualTo(2));
         }
     }
 }

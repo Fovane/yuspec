@@ -11,7 +11,7 @@ namespace Yuspec.Unity
         [SerializeField] private string currentState;
         [SerializeField] private List<string> tags = new List<string>();
 
-        private readonly Dictionary<string, object> properties = new Dictionary<string, object>();
+        private readonly Dictionary<string, object> properties = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
         private YuspecRuntime runtime;
 
         public string EntityId
@@ -53,9 +53,30 @@ namespace Yuspec.Unity
 
         public void SetProperty(string propertyName, object value)
         {
+            SetProperty(propertyName, value, false);
+        }
+
+        internal void SetPropertyFromRuntime(string propertyName, object value)
+        {
+            SetProperty(propertyName, value, true);
+        }
+
+        private void SetProperty(string propertyName, object value, bool runtimeValidated)
+        {
             if (string.IsNullOrWhiteSpace(propertyName))
             {
                 return;
+            }
+
+            if (!runtimeValidated && runtime != null && runtime.TryGetEntityPropertyDeclaration(EntityType, propertyName, out var declaration))
+            {
+                if (!YuspecSpecParser.TryConvertToYuspecType(value, declaration.Type, out var converted))
+                {
+                    runtime.ReportTypeMismatch(EntityType, propertyName, declaration.Type, value, declaration.SourceName, declaration.Line);
+                    return;
+                }
+
+                value = converted;
             }
 
             properties[propertyName] = value;

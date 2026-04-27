@@ -1,5 +1,7 @@
 using NUnit.Framework;
 using UnityEditor;
+using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace Yuspec.Unity.Editor.Tests
 {
@@ -8,9 +10,19 @@ namespace Yuspec.Unity.Editor.Tests
         [Test]
         public void DebugWindow_Opens()
         {
-            var window = EditorWindow.GetWindow<YuspecDebugWindow>();
-            Assert.That(window, Is.Not.Null);
-            window.Close();
+            var previousIgnoreFailingMessages = LogAssert.ignoreFailingMessages;
+            LogAssert.ignoreFailingMessages = Application.isBatchMode;
+
+            try
+            {
+                var window = EditorWindow.GetWindow<YuspecDebugWindow>();
+                Assert.That(window, Is.Not.Null);
+                window.Close();
+            }
+            finally
+            {
+                LogAssert.ignoreFailingMessages = previousIgnoreFailingMessages;
+            }
         }
     }
 }

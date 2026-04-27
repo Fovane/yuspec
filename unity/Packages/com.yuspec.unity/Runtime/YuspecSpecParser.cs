@@ -9,24 +9,33 @@ namespace Yuspec.Unity
 {
     public sealed class YuspecSpecParser
     {
-        private static readonly Regex EntityStart = new Regex(@"^entity\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*$", RegexOptions.Compiled);
-        private static readonly Regex PropertyAssignment = new Regex(@"^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$", RegexOptions.Compiled);
+        private static readonly Regex EntityStart = new Regex(
+            "^entity\\s+([A-Za-z_][A-Za-z0-9_]*)(?:\\s+from\\s+\"([^\"]+)\")?\\s*\\{\\s*$",
+            RegexOptions.Compiled);
+        private static readonly Regex PropertyLine = new Regex(
+            "^([A-Za-z_][A-Za-z0-9_]*)\\s*(?::\\s*([A-Za-z_][A-Za-z0-9_\\[\\]]*))?(?:\\s*=\\s*(.+))?$",
+            RegexOptions.Compiled);
         private static readonly Regex HandlerStart = new Regex(
-            @"^on\s+([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)(?:\s+with\s+([A-Za-z_][A-Za-z0-9_]*))?(?:\s+when\s+(.+))?:\s*$",
+            "^on\\s+([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)(?:\\s+with\\s+([A-Za-z_][A-Za-z0-9_]*))?(?:\\s+when\\s+(.+))?:\\s*$",
             RegexOptions.Compiled);
         private static readonly Regex BehaviorStart = new Regex(
-            @"^behavior\s+([A-Za-z_][A-Za-z0-9_]*)\s+for\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*$",
+            "^behavior\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+for\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\{\\s*$",
             RegexOptions.Compiled);
-        private static readonly Regex StateStart = new Regex(@"^state\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{\s*$", RegexOptions.Compiled);
-        private static readonly Regex ScenarioStart = new Regex(@"^scenario\s+\""([^\""]+)\""\s*\{\s*$", RegexOptions.Compiled);
-        private static readonly Regex TransitionLine = new Regex(@"^on\s+(.+?)\s*->\s*([A-Za-z_][A-Za-z0-9_]*)\s*$", RegexOptions.Compiled);
-        private static readonly Regex EveryStart = new Regex(@"^every\s+(.+):\s*$", RegexOptions.Compiled);
-        private static readonly Regex SetAction = new Regex(@"^set\s+([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$", RegexOptions.Compiled);
+        private static readonly Regex StateStart = new Regex("^state\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\{\\s*$", RegexOptions.Compiled);
+        private static readonly Regex ScenarioStart = new Regex("^scenario\\s+\"([^\"]+)\"\\s*\\{\\s*$", RegexOptions.Compiled);
+        private static readonly Regex DialogueStart = new Regex(
+            "^dialogue\\s+\"([^\"]+)\"\\s+for\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\{\\s*$",
+            RegexOptions.Compiled);
+        private static readonly Regex DialogueLine = new Regex("^line\\s+\"([^\"]*)\"\\s*$", RegexOptions.Compiled);
+        private static readonly Regex DialogueChoice = new Regex("^choice\\s+\"([^\"]*)\"\\s*->\\s*([A-Za-z_][A-Za-z0-9_]*|end)\\s*$", RegexOptions.Compiled);
+        private static readonly Regex TransitionLine = new Regex("^on\\s+(.+?)\\s*->\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*$", RegexOptions.Compiled);
+        private static readonly Regex EveryStart = new Regex("^every\\s+(.+):\\s*$", RegexOptions.Compiled);
+        private static readonly Regex SetAction = new Regex("^set\\s+([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*(.+)$", RegexOptions.Compiled);
         private static readonly Regex HasCondition = new Regex(
-            @"^([A-Za-z_][A-Za-z0-9_]*)\.has\(([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\)$",
+            "^([A-Za-z_][A-Za-z0-9_]*)\\.has\\(([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)\\)$",
             RegexOptions.Compiled);
         private static readonly Regex EqualsCondition = new Regex(
-            @"^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*==\s*(.+)$",
+            "^([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)\\s*==\\s*(.+)$",
             RegexOptions.Compiled);
 
         private readonly List<YuspecDiagnostic> diagnostics = new List<YuspecDiagnostic>();
@@ -57,7 +66,7 @@ namespace Yuspec.Unity
                 var entityMatch = EntityStart.Match(line);
                 if (entityMatch.Success)
                 {
-                    index = ParseEntity(spec, entityMatch.Groups[1].Value, lines, index + 1, sourceName, lineNumber);
+                    index = ParseEntity(spec, entityMatch, lines, index + 1, sourceName, lineNumber);
                     continue;
                 }
 
@@ -82,16 +91,25 @@ namespace Yuspec.Unity
                     continue;
                 }
 
+                var dialogueMatch = DialogueStart.Match(line);
+                if (dialogueMatch.Success)
+                {
+                    index = ParseDialogue(spec, dialogueMatch, lines, index + 1, sourceName, lineNumber);
+                    continue;
+                }
+
                 diagnostics.Add(new YuspecDiagnostic(YuspecDiagnosticSeverity.Warning, "YSP1001", $"Unsupported top-level syntax '{line}'.", sourceName, lineNumber, 1));
             }
 
             return spec;
         }
 
-        private int ParseEntity(YuspecCompiledSpec spec, string entityType, string[] lines, int startIndex, string sourceName, int startLine)
+        private int ParseEntity(YuspecCompiledSpec spec, Match entityMatch, string[] lines, int startIndex, string sourceName, int startLine)
         {
-            var declaration = new YuspecEntityDeclaration(entityType);
-            var entitySyntax = new YuspecEntitySyntax(entityType, new YuspecSourceLocation(sourceName, startLine, 1));
+            var entityType = entityMatch.Groups[1].Value;
+            var assetPath = entityMatch.Groups[2].Success ? entityMatch.Groups[2].Value : string.Empty;
+            var declaration = new YuspecEntityDeclaration(entityType, sourceName, startLine, assetPath);
+            var entitySyntax = new YuspecEntitySyntax(entityType, assetPath, new YuspecSourceLocation(sourceName, startLine, 1));
 
             for (var index = startIndex; index < lines.Length; index++)
             {
@@ -109,7 +127,7 @@ namespace Yuspec.Unity
                     return index;
                 }
 
-                var propertyMatch = PropertyAssignment.Match(line);
+                var propertyMatch = PropertyLine.Match(line);
                 if (!propertyMatch.Success)
                 {
                     diagnostics.Add(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP1002", $"Invalid entity property syntax '{line}'.", sourceName, lineNumber, 1));
@@ -117,12 +135,42 @@ namespace Yuspec.Unity
                 }
 
                 var propertyName = propertyMatch.Groups[1].Value;
-                var propertyValue = ParseLiteral(propertyMatch.Groups[2].Value.Trim());
-                declaration.Properties[propertyName] = propertyValue;
-                entitySyntax.Properties.Add(new YuspecPropertySyntax(propertyName, propertyValue, new YuspecSourceLocation(sourceName, lineNumber, 1)));
+                var typeText = propertyMatch.Groups[2].Success ? propertyMatch.Groups[2].Value.Trim() : string.Empty;
+                var hasValue = propertyMatch.Groups[3].Success;
+                var valueText = hasValue ? propertyMatch.Groups[3].Value.Trim() : string.Empty;
+                if (string.IsNullOrEmpty(typeText) && !hasValue)
+                {
+                    diagnostics.Add(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP1002", $"Property '{propertyName}' needs a type or value.", sourceName, lineNumber, 1));
+                    continue;
+                }
+
+                var propertyType = ParsePropertyType(typeText, sourceName, lineNumber, propertyName);
+                object propertyValue = null;
+                if (hasValue)
+                {
+                    propertyValue = ParseLiteral(valueText);
+                    if (propertyType == YuspecPropertyType.Unknown)
+                    {
+                        propertyType = InferType(propertyValue);
+                    }
+
+                    if (propertyType != YuspecPropertyType.Unknown && !IsValueOfType(propertyValue, propertyType))
+                    {
+                        diagnostics.Add(new YuspecDiagnostic(
+                            YuspecDiagnosticSeverity.Error,
+                            "YSP1002V",
+                            $"Type mismatch for '{propertyName}': expected {FormatType(propertyType)}, got {FormatClrType(propertyValue)}.",
+                            sourceName,
+                            lineNumber,
+                            1));
+                    }
+                }
+
+                declaration.Properties[propertyName] = new YuspecPropertyDeclaration(propertyName, propertyType, propertyValue, hasValue, sourceName, lineNumber, 1);
+                entitySyntax.Properties.Add(new YuspecPropertySyntax(propertyName, propertyValue, hasValue, propertyType, new YuspecSourceLocation(sourceName, lineNumber, 1)));
             }
 
-            diagnostics.Add(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP1003", $"Entity '{entityType}' is missing closing brace.", sourceName, startIndex, 1));
+            diagnostics.Add(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP1003", $"Entity '{entityType}' is missing closing brace.", sourceName, startLine, 1));
             spec.Entities.Add(declaration);
             spec.SyntaxTree.Entities.Add(entitySyntax);
             return lines.Length - 1;
@@ -157,7 +205,7 @@ namespace Yuspec.Unity
                     break;
                 }
 
-                var action = ParseAction(trimmed, sourceName, index + 1);
+                var action = ParseAction(trimmed, index + 1);
                 if (action != null)
                 {
                     handler.Actions.Add(action);
@@ -181,7 +229,7 @@ namespace Yuspec.Unity
             var behaviorName = behaviorMatch.Groups[1].Value;
             var entityType = behaviorMatch.Groups[2].Value;
             var behaviorSyntax = new YuspecBehaviorSyntax(behaviorName, entityType, new YuspecSourceLocation(sourceName, lineNumber, 1));
-            var behaviorDefinition = new YuspecBehaviorDefinition(behaviorName, entityType, lineNumber);
+            var behaviorDefinition = new YuspecBehaviorDefinition(behaviorName, entityType, sourceName, lineNumber);
 
             for (var index = startIndex; index < lines.Length; index++)
             {
@@ -224,7 +272,7 @@ namespace Yuspec.Unity
             int lineNumber)
         {
             var stateSyntax = new YuspecStateSyntax(stateName, new YuspecSourceLocation(sourceName, lineNumber, 1));
-            var stateDefinition = new YuspecStateDefinition(stateName, lineNumber);
+            var stateDefinition = new YuspecStateDefinition(stateName, sourceName, lineNumber);
 
             for (var index = startIndex; index < lines.Length; index++)
             {
@@ -267,7 +315,7 @@ namespace Yuspec.Unity
                 if (everyMatch.Success)
                 {
                     var everySyntax = new YuspecEverySyntax(everyMatch.Groups[1].Value.Trim(), new YuspecSourceLocation(sourceName, index + 1, 1));
-                    var timedBlock = new YuspecTimedActionBlock(everyMatch.Groups[1].Value.Trim(), index + 1);
+                    var timedBlock = new YuspecTimedActionBlock(everyMatch.Groups[1].Value.Trim(), sourceName, index + 1);
                     index = ParseStateActionBlock(lines, index + 1, sourceName, everySyntax.Actions, timedBlock.Actions, out var lastIndex);
                     stateSyntax.EveryBlocks.Add(everySyntax);
                     stateDefinition.EveryBlocks.Add(timedBlock);
@@ -286,6 +334,7 @@ namespace Yuspec.Unity
                     stateDefinition.Transitions.Add(new YuspecTransitionDefinition(
                         transitionMatch.Groups[1].Value.Trim(),
                         transitionMatch.Groups[2].Value.Trim(),
+                        sourceName,
                         index + 1));
                     continue;
                 }
@@ -301,9 +350,7 @@ namespace Yuspec.Unity
 
         private int ParseScenario(YuspecCompiledSpec spec, Match scenarioMatch, string[] lines, int startIndex, string sourceName, int lineNumber)
         {
-            var scenarioSyntax = new YuspecScenarioSyntax(
-                scenarioMatch.Groups[1].Value,
-                new YuspecSourceLocation(sourceName, lineNumber, 1));
+            var scenarioSyntax = new YuspecScenarioSyntax(scenarioMatch.Groups[1].Value, new YuspecSourceLocation(sourceName, lineNumber, 1));
             var scenarioDefinition = new YuspecScenarioDefinition(scenarioMatch.Groups[1].Value, lineNumber);
 
             for (var index = startIndex; index < lines.Length; index++)
@@ -334,6 +381,53 @@ namespace Yuspec.Unity
             diagnostics.Add(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP1011", $"Scenario '{scenarioSyntax.Name}' is missing closing brace.", sourceName, lineNumber, 1));
             spec.SyntaxTree.Scenarios.Add(scenarioSyntax);
             spec.Scenarios.Add(scenarioDefinition);
+            return lines.Length - 1;
+        }
+
+        private int ParseDialogue(YuspecCompiledSpec spec, Match dialogueMatch, string[] lines, int startIndex, string sourceName, int lineNumber)
+        {
+            var name = dialogueMatch.Groups[1].Value;
+            var entityType = dialogueMatch.Groups[2].Value;
+            var syntax = new YuspecDialogueSyntax(name, entityType, new YuspecSourceLocation(sourceName, lineNumber, 1));
+            var definition = new YuspecDialogueDefinition(name, entityType, sourceName, lineNumber);
+
+            for (var index = startIndex; index < lines.Length; index++)
+            {
+                var line = StripComment(lines[index]).Trim();
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                if (line == "}")
+                {
+                    spec.SyntaxTree.Dialogues.Add(syntax);
+                    spec.Dialogues.Add(definition);
+                    return index;
+                }
+
+                var lineMatch = DialogueLine.Match(line);
+                if (lineMatch.Success)
+                {
+                    syntax.Entries.Add(new YuspecDialogueEntrySyntax(YuspecDialogueEntryKind.Line, lineMatch.Groups[1].Value, string.Empty, new YuspecSourceLocation(sourceName, index + 1, 1)));
+                    definition.Entries.Add(new YuspecDialogueEntry(YuspecDialogueEntryKind.Line, lineMatch.Groups[1].Value, string.Empty, index + 1));
+                    continue;
+                }
+
+                var choiceMatch = DialogueChoice.Match(line);
+                if (choiceMatch.Success)
+                {
+                    syntax.Entries.Add(new YuspecDialogueEntrySyntax(YuspecDialogueEntryKind.Choice, choiceMatch.Groups[1].Value, choiceMatch.Groups[2].Value, new YuspecSourceLocation(sourceName, index + 1, 1)));
+                    definition.Entries.Add(new YuspecDialogueEntry(YuspecDialogueEntryKind.Choice, choiceMatch.Groups[1].Value, choiceMatch.Groups[2].Value, index + 1));
+                    continue;
+                }
+
+                diagnostics.Add(new YuspecDiagnostic(YuspecDiagnosticSeverity.Warning, "YSP1012", $"Unsupported dialogue syntax '{line}'.", sourceName, index + 1, 1));
+            }
+
+            diagnostics.Add(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP1013", $"Dialogue '{name}' is missing closing brace.", sourceName, lineNumber, 1));
+            spec.SyntaxTree.Dialogues.Add(syntax);
+            spec.Dialogues.Add(definition);
             return lines.Length - 1;
         }
 
@@ -392,7 +486,7 @@ namespace Yuspec.Unity
                     break;
                 }
 
-                var action = ParseAction(trimmed, sourceName, index + 1);
+                var action = ParseAction(trimmed, index + 1);
                 if (action != null)
                 {
                     syntaxTarget.Add(CreateActionSyntax(action, trimmed, sourceName, index + 1));
@@ -419,13 +513,7 @@ namespace Yuspec.Unity
         {
             if (action.IsSetAction)
             {
-                var setArguments = new[]
-                {
-                    action.TargetEntity,
-                    action.TargetProperty,
-                    action.AssignedValue
-                };
-
+                var setArguments = new[] { action.TargetEntity, action.TargetProperty, action.AssignedValue };
                 return new YuspecActionSyntax(action.Name, rawActionText, setArguments, new YuspecSourceLocation(sourceName, lineNumber, 1));
             }
 
@@ -437,30 +525,20 @@ namespace Yuspec.Unity
             var hasMatch = HasCondition.Match(conditionText);
             if (hasMatch.Success)
             {
-                return new YuspecCondition(
-                    YuspecConditionKind.HasValue,
-                    hasMatch.Groups[1].Value,
-                    string.Empty,
-                    hasMatch.Groups[2].Value,
-                    hasMatch.Groups[3].Value);
+                return new YuspecCondition(YuspecConditionKind.HasValue, hasMatch.Groups[1].Value, string.Empty, hasMatch.Groups[2].Value, hasMatch.Groups[3].Value);
             }
 
             var equalsMatch = EqualsCondition.Match(conditionText);
             if (equalsMatch.Success)
             {
-                return new YuspecCondition(
-                    YuspecConditionKind.Equals,
-                    equalsMatch.Groups[1].Value,
-                    equalsMatch.Groups[2].Value,
-                    string.Empty,
-                    equalsMatch.Groups[3].Value.Trim());
+                return new YuspecCondition(YuspecConditionKind.Equals, equalsMatch.Groups[1].Value, equalsMatch.Groups[2].Value, string.Empty, equalsMatch.Groups[3].Value.Trim());
             }
 
             diagnostics.Add(new YuspecDiagnostic(YuspecDiagnosticSeverity.Warning, "YSP1005", $"Unsupported condition '{conditionText}'. It will fail closed.", sourceName, lineNumber, 1));
             return new YuspecCondition(YuspecConditionKind.Equals, "__unsupported__", "__unsupported__", string.Empty, "__unsupported__");
         }
 
-        private YuspecActionCall ParseAction(string actionText, string sourceName, int lineNumber)
+        private static YuspecActionCall ParseAction(string actionText, int lineNumber)
         {
             var setMatch = SetAction.Match(actionText);
             if (setMatch.Success)
@@ -489,19 +567,20 @@ namespace Yuspec.Unity
             if (text.StartsWith("[", StringComparison.Ordinal) && text.EndsWith("]", StringComparison.Ordinal))
             {
                 var inner = text.Substring(1, text.Length - 2).Trim();
-                var items = new List<string>();
+                var items = new List<object>();
                 if (string.IsNullOrWhiteSpace(inner))
                 {
-                    return items;
+                    return new List<string>();
                 }
 
                 foreach (var item in SplitListItems(inner))
                 {
-                    var parsedItem = ParseLiteral(item);
-                    items.Add(parsedItem?.ToString() ?? string.Empty);
+                    items.Add(ParseLiteral(item));
                 }
 
-                return items;
+                return items.All(item => item is string)
+                    ? (object)items.Cast<string>().ToList()
+                    : items;
             }
 
             if (text.Length >= 2 && text[0] == '"' && text[text.Length - 1] == '"')
@@ -556,6 +635,115 @@ namespace Yuspec.Unity
             return tokens;
         }
 
+        public static bool TryConvertToYuspecType(object value, YuspecPropertyType type, out object converted)
+        {
+            converted = value;
+            if (type == YuspecPropertyType.Unknown)
+            {
+                return true;
+            }
+
+            if (value == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                switch (type)
+                {
+                    case YuspecPropertyType.Int:
+                        if (value is int) return true;
+                        if (value is float floatValue && Math.Abs(floatValue % 1f) < 0.0001f)
+                        {
+                            converted = (int)floatValue;
+                            return true;
+                        }
+                        return false;
+                    case YuspecPropertyType.Float:
+                        if (value is float) return true;
+                        if (value is int intValue)
+                        {
+                            converted = (float)intValue;
+                            return true;
+                        }
+                        return false;
+                    case YuspecPropertyType.Bool:
+                        return value is bool;
+                    case YuspecPropertyType.String:
+                        return value is string;
+                    case YuspecPropertyType.StringArray:
+                        if (value is List<string>) return true;
+                        if (value is string[] array)
+                        {
+                            converted = array.ToList();
+                            return true;
+                        }
+                        return false;
+                    default:
+                        return true;
+                }
+            }
+            catch
+            {
+                converted = value;
+                return false;
+            }
+        }
+
+        public static bool IsValueOfType(object value, YuspecPropertyType type)
+        {
+            return TryConvertToYuspecType(value, type, out _);
+        }
+
+        public static YuspecPropertyType InferType(object value)
+        {
+            if (value is int) return YuspecPropertyType.Int;
+            if (value is float) return YuspecPropertyType.Float;
+            if (value is bool) return YuspecPropertyType.Bool;
+            if (value is string) return YuspecPropertyType.String;
+            if (value is List<string> || value is string[]) return YuspecPropertyType.StringArray;
+            return YuspecPropertyType.Unknown;
+        }
+
+        public static string FormatType(YuspecPropertyType type)
+        {
+            switch (type)
+            {
+                case YuspecPropertyType.Int: return "int";
+                case YuspecPropertyType.Float: return "float";
+                case YuspecPropertyType.Bool: return "bool";
+                case YuspecPropertyType.String: return "string";
+                case YuspecPropertyType.StringArray: return "string[]";
+                default: return "unknown";
+            }
+        }
+
+        public static string FormatClrType(object value)
+        {
+            return value == null ? "null" : value.GetType().Name;
+        }
+
+        private YuspecPropertyType ParsePropertyType(string typeText, string sourceName, int lineNumber, string propertyName)
+        {
+            if (string.IsNullOrWhiteSpace(typeText))
+            {
+                return YuspecPropertyType.Unknown;
+            }
+
+            switch (typeText.Trim().ToLowerInvariant())
+            {
+                case "int": return YuspecPropertyType.Int;
+                case "float": return YuspecPropertyType.Float;
+                case "bool": return YuspecPropertyType.Bool;
+                case "string": return YuspecPropertyType.String;
+                case "string[]": return YuspecPropertyType.StringArray;
+                default:
+                    diagnostics.Add(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP1002T", $"Unknown property type '{typeText}' for '{propertyName}'.", sourceName, lineNumber, 1));
+                    return YuspecPropertyType.Unknown;
+            }
+        }
+
         private static List<string> SplitListItems(string text)
         {
             var items = new List<string>();
@@ -592,14 +780,13 @@ namespace Yuspec.Unity
                 return;
             }
 
-            tokens.Add(builder.ToString());
+            tokens.Add(builder.ToString().Trim());
             builder.Clear();
         }
 
         private static string StripComment(string line)
         {
             var inString = false;
-
             for (var index = 0; index < line.Length; index++)
             {
                 var character = line[index];

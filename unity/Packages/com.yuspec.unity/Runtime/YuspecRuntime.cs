@@ -1,9 +1,16 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using UnityEngine;
+
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace Yuspec.Unity
 {
@@ -16,8 +23,9 @@ namespace Yuspec.Unity
         [SerializeField] private float hotReloadPollInterval = 0.5f;
         [SerializeField] private int maxRecentEvents = 100;
 
-        private readonly Dictionary<string, YuspecEntity> entitiesById = new Dictionary<string, YuspecEntity>();
+        private readonly Dictionary<string, YuspecEntity> entitiesById = new Dictionary<string, YuspecEntity>(StringComparer.OrdinalIgnoreCase);
         private readonly List<YuspecCompiledSpec> compiledSpecs = new List<YuspecCompiledSpec>();
+        private readonly List<UnityEngine.Object> compiledSpecAssets = new List<UnityEngine.Object>();
         private readonly List<YuspecDiagnostic> diagnostics = new List<YuspecDiagnostic>();
         private readonly List<YuspecEvent> recentEvents = new List<YuspecEvent>();
         private readonly List<string> debugTrace = new List<string>();
@@ -26,14 +34,18 @@ namespace Yuspec.Unity
         private readonly List<YuspecScenarioResult> scenarioResults = new List<YuspecScenarioResult>();
         private readonly List<StateMachineSession> stateMachineSessions = new List<StateMachineSession>();
         private readonly Dictionary<UnityEngine.Object, int> specContentHashes = new Dictionary<UnityEngine.Object, int>();
+        private readonly Dictionary<string, FileSystemWatcher> fileWatchers = new Dictionary<string, FileSystemWatcher>(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentQueue<string> pendingHotReloadPaths = new ConcurrentQueue<string>();
+        private readonly Dictionary<string, UnityEngine.Object> scriptableObjectCache = new Dictionary<string, UnityEngine.Object>(StringComparer.OrdinalIgnoreCase);
         private readonly YuspecActionRegistry actionRegistry = new YuspecActionRegistry();
+        private YuspecDialogueRuntime dialogueRuntime;
         private float hotReloadTimer;
 
         private static readonly Regex ExpectEquals = new Regex(
-            @"^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*==\s*(.+)$",
+            "^([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)\\s*==\\s*(.+)$",
             RegexOptions.Compiled);
         private static readonly Regex ScenarioWhenEvent = new Regex(
-            @"^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)(?:\s+([A-Za-z_][A-Za-z0-9_]*))?$",
+            "^([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)(?:\\s+([A-Za-z_][A-Za-z0-9_]*))?$",
             RegexOptions.Compiled);
 
         public IReadOnlyList<UnityEngine.Object> Specs => specs ?? Array.Empty<UnityEngine.Object>();
@@ -41,6 +53,7 @@ namespace Yuspec.Unity
         public bool HotReload => hotReload;
         public float HotReloadPollInterval => hotReloadPollInterval;
         public YuspecActionRegistry ActionRegistry => actionRegistry;
+        public YuspecDialogueRuntime DialogueRuntime => dialogueRuntime;
         public IReadOnlyList<YuspecCompiledSpec> CompiledSpecs => compiledSpecs;
         public IReadOnlyList<YuspecDiagnostic> Diagnostics => diagnostics;
         public IReadOnlyList<YuspecEvent> RecentEvents => recentEvents;
@@ -57,12 +70,19 @@ namespace Yuspec.Unity
 
         private void Update()
         {
+            DrainHotReloadQueue();
+
             if (Application.isPlaying)
             {
                 TickStateMachines(Time.deltaTime);
             }
 
             TickHotReload(Application.isPlaying ? Time.deltaTime : hotReloadPollInterval);
+        }
+
+        private void OnDestroy()
+        {
+            DisposeFileWatchers();
         }
 
         public void Initialize()
@@ -75,81 +95,115 @@ namespace Yuspec.Unity
             scenarioResults.Clear();
             stateMachineStatuses.Clear();
             stateMachineSessions.Clear();
+            compiledSpecs.Clear();
+            compiledSpecAssets.Clear();
+            scriptableObjectCache.Clear();
+
+            dialogueRuntime = GetComponent<YuspecDialogueRuntime>();
+            if (dialogueRuntime == null)
+            {
+                dialogueRuntime = gameObject.AddComponent<YuspecDialogueRuntime>();
+            }
+
             actionRegistry.RegisterFromLoadedAssemblies();
-            diagnostics.AddRange(actionRegistry.Diagnostics);
+            foreach (var diagnostic in actionRegistry.Diagnostics)
+            {
+                AddDiagnostic(diagnostic);
+            }
+
             LoadSpecs();
         }
 
         public void LoadSpecs()
         {
             compiledSpecs.Clear();
-            diagnostics.RemoveAll(diagnostic => diagnostic.code.StartsWith("YSP01", StringComparison.Ordinal) || diagnostic.code.StartsWith("YSP10", StringComparison.Ordinal));
+            compiledSpecAssets.Clear();
+            scriptableObjectCache.Clear();
 
             if (specs == null)
             {
+                DisposeFileWatchers();
                 return;
             }
 
             var entityTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var parser = new YuspecSpecParser();
             foreach (var spec in specs)
             {
                 if (spec == null)
                 {
-                    diagnostics.Add(new YuspecDiagnostic(YuspecDiagnosticSeverity.Warning, "YSP0100", "Spec slot is empty."));
+                    AddDiagnostic(new YuspecDiagnostic(YuspecDiagnosticSeverity.Warning, "YSP0100", "Spec slot is empty."));
                     continue;
                 }
 
                 var sourceText = GetSpecText(spec);
+                var sourceName = GetSpecSourceName(spec);
                 if (sourceText == null)
                 {
-                    diagnostics.Add(new YuspecDiagnostic(
+                    AddDiagnostic(new YuspecDiagnostic(
                         YuspecDiagnosticSeverity.Error,
                         "YSP0104",
                         $"Unsupported spec asset type '{spec.GetType().Name}'. Use a .yuspec asset or TextAsset.",
-                        spec.name));
+                        sourceName,
+                        1,
+                        1));
                     continue;
                 }
 
-                var compiledSpec = parser.Parse(spec.name, sourceText);
+                var parser = new YuspecSpecParser();
+                var compiledSpec = parser.Parse(sourceName, sourceText);
                 compiledSpecs.Add(compiledSpec);
-                diagnostics.AddRange(parser.Diagnostics);
-                diagnostics.Add(new YuspecDiagnostic(YuspecDiagnosticSeverity.Info, "YSP0101", $"Loaded spec '{spec.name}'.", spec.name));
+                compiledSpecAssets.Add(spec);
+                foreach (var diagnostic in parser.Diagnostics)
+                {
+                    AddDiagnostic(diagnostic);
+                }
+
+                AddDiagnostic(new YuspecDiagnostic(YuspecDiagnosticSeverity.Info, "YSP0101", $"Loaded spec '{sourceName}'.", sourceName));
 
                 foreach (var declaration in compiledSpec.Entities)
                 {
                     if (!entityTypes.Add(declaration.EntityType))
                     {
-                        diagnostics.Add(new YuspecDiagnostic(
+                        AddDiagnostic(new YuspecDiagnostic(
                             YuspecDiagnosticSeverity.Error,
                             "YSP0102",
                             $"Duplicate entity declaration '{declaration.EntityType}'.",
-                            spec.name));
+                            sourceName,
+                            declaration.Line,
+                            1));
                     }
                 }
             }
 
+            LoadScriptableObjectBindings();
             ValidateActionBindings();
             ValidateStrictReferences();
-            ApplyDeclarationsToRegisteredEntities();
-            BuildStateMachineSessions();
+            ValidateStaticAnalysis();
+            ApplyDeclarationsToRegisteredEntities(false);
+            BuildStateMachineSessions(false);
             CaptureSpecHashes();
+            ConfigureFileWatchers();
         }
 
         public bool ReloadSpecsIfChanged()
         {
-            if (!HaveSpecHashesChanged())
+            for (var index = 0; index < compiledSpecAssets.Count; index++)
             {
-                return false;
+                var asset = compiledSpecAssets[index];
+                var currentHash = GetSpecHash(asset);
+                if (!specContentHashes.TryGetValue(asset, out var previousHash) || previousHash != currentHash)
+                {
+                    var sourceText = GetSpecText(asset);
+                    if (sourceText == null)
+                    {
+                        return false;
+                    }
+
+                    return ReloadSpecAtIndex(index, GetSpecSourceName(asset), sourceText);
+                }
             }
 
-            Initialize();
-            ApplyDeclarationsToRegisteredEntities(true);
-            BuildStateMachineSessions();
-            var diagnostic = new YuspecDiagnostic(YuspecDiagnosticSeverity.Info, "YSP0600", "Hot reloaded changed YUSPEC specs.");
-            diagnostics.Add(diagnostic);
-            AddTrace(YuspecTraceKind.Diagnostic, diagnostic.ToString());
-            return true;
+            return false;
         }
 
         public void RegisterEntity(YuspecEntity entity)
@@ -159,22 +213,21 @@ namespace Yuspec.Unity
                 return;
             }
 
-            var entityId = entity.EntityId;
-            if (string.IsNullOrWhiteSpace(entityId))
+            if (string.IsNullOrWhiteSpace(entity.EntityId))
             {
-                diagnostics.Add(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0200", "Entity id is empty."));
+                AddDiagnostic(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0200", "Entity id is empty."));
                 return;
             }
 
-            if (entitiesById.TryGetValue(entityId, out var existing) && existing != entity)
+            if (entitiesById.TryGetValue(entity.EntityId, out var existing) && existing != entity)
             {
-                diagnostics.Add(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0201", $"Duplicate entity id '{entityId}'."));
+                AddDiagnostic(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0201", $"Duplicate entity id '{entity.EntityId}'."));
                 return;
             }
 
-            entitiesById[entityId] = entity;
-            ApplyDeclaration(entity);
-            BuildStateMachineSessions();
+            entitiesById[entity.EntityId] = entity;
+            ApplyDeclaration(entity, false);
+            BuildStateMachineSessions(true);
         }
 
         public void UnregisterEntity(YuspecEntity entity)
@@ -187,8 +240,33 @@ namespace Yuspec.Unity
             if (entitiesById.TryGetValue(entity.EntityId, out var existing) && existing == entity)
             {
                 entitiesById.Remove(entity.EntityId);
-                BuildStateMachineSessions();
+                BuildStateMachineSessions(true);
             }
+        }
+
+        public YuspecEntityDeclaration GetEntityDeclaration(string entityType)
+        {
+            return compiledSpecs
+                .SelectMany(spec => spec.Entities)
+                .FirstOrDefault(candidate => string.Equals(candidate.EntityType, entityType, StringComparison.OrdinalIgnoreCase));
+        }
+
+        public bool TryGetEntityPropertyDeclaration(string entityType, string propertyName, out YuspecPropertyDeclaration property)
+        {
+            property = null;
+            var declaration = GetEntityDeclaration(entityType);
+            return declaration != null && declaration.Properties.TryGetValue(propertyName, out property);
+        }
+
+        public void ReportTypeMismatch(string entityType, string propertyName, YuspecPropertyType expectedType, object value, string sourceName = "", int line = 0)
+        {
+            AddDiagnostic(new YuspecDiagnostic(
+                YuspecDiagnosticSeverity.Error,
+                "YSP1002R",
+                $"Type mismatch for '{entityType}.{propertyName}': expected {YuspecSpecParser.FormatType(expectedType)}, got {YuspecSpecParser.FormatClrType(value)}.",
+                sourceName,
+                line,
+                1));
         }
 
         public void Emit(string eventName)
@@ -205,7 +283,7 @@ namespace Yuspec.Unity
         {
             if (string.IsNullOrWhiteSpace(eventName))
             {
-                diagnostics.Add(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0300", "Event name is empty."));
+                AddDiagnostic(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0300", "Event name is empty."));
                 return;
             }
 
@@ -243,15 +321,9 @@ namespace Yuspec.Unity
 
         public void TickStateMachines(float deltaTime)
         {
-            if (stateMachineSessions.Count == 0)
-            {
-                return;
-            }
-
             foreach (var session in stateMachineSessions)
             {
                 session.StateElapsed += Mathf.Max(0f, deltaTime);
-
                 if (session.CurrentState == null)
                 {
                     continue;
@@ -273,7 +345,7 @@ namespace Yuspec.Unity
                     }
 
                     session.EveryTimers[everyBlock] = 0f;
-                    ExecuteActions(everyBlock.Actions, session.Entity, session.Entity, session.Behavior.Name, everyBlock.Line);
+                    ExecuteActions(everyBlock.Actions, session.Entity, session.Entity, session.Behavior.Name, everyBlock.SourceName, everyBlock.Line);
                 }
 
                 session.Status.StateElapsed = session.StateElapsed;
@@ -283,7 +355,6 @@ namespace Yuspec.Unity
         public IReadOnlyList<YuspecScenarioResult> RunScenarios()
         {
             scenarioResults.Clear();
-
             foreach (var scenario in compiledSpecs.SelectMany(spec => spec.Scenarios))
             {
                 scenarioResults.Add(RunScenario(scenario));
@@ -296,10 +367,9 @@ namespace Yuspec.Unity
         {
             var before = actionRegistry.Diagnostics.Count;
             var result = actionRegistry.Invoke(actionName, args);
-
             foreach (var diagnostic in actionRegistry.Diagnostics.Skip(before))
             {
-                diagnostics.Add(diagnostic);
+                AddDiagnostic(diagnostic);
             }
 
             return result;
@@ -317,24 +387,74 @@ namespace Yuspec.Unity
             traceEntries.Clear();
         }
 
+        private void LoadScriptableObjectBindings()
+        {
+            foreach (var declaration in compiledSpecs.SelectMany(spec => spec.Entities).Where(entity => !string.IsNullOrWhiteSpace(entity.ScriptableObjectPath)))
+            {
+                var asset = LoadScriptableObject(declaration.ScriptableObjectPath);
+                if (asset == null)
+                {
+                    AddDiagnostic(new YuspecDiagnostic(
+                        YuspecDiagnosticSeverity.Error,
+                        "YSP0501",
+                        $"ScriptableObject asset not found at '{declaration.ScriptableObjectPath}'.",
+                        declaration.SourceName,
+                        declaration.Line,
+                        1));
+                    continue;
+                }
+
+                foreach (var property in declaration.Properties.Values)
+                {
+                    if (!TryGetMemberValue(asset, property.Name, out var memberValue))
+                    {
+                        AddDiagnostic(new YuspecDiagnostic(
+                            YuspecDiagnosticSeverity.Error,
+                            "YSP0502",
+                            $"ScriptableObject '{declaration.ScriptableObjectPath}' has no field or property '{property.Name}'.",
+                            property.SourceName,
+                            property.Line,
+                            property.Column));
+                        continue;
+                    }
+
+                    var normalized = NormalizeScriptableObjectValue(memberValue);
+                    if (!YuspecSpecParser.TryConvertToYuspecType(normalized, property.Type, out var converted))
+                    {
+                        AddDiagnostic(new YuspecDiagnostic(
+                            YuspecDiagnosticSeverity.Error,
+                            "YSP0503",
+                            $"ScriptableObject value '{property.Name}' type mismatch: expected {YuspecSpecParser.FormatType(property.Type)}, got {YuspecSpecParser.FormatClrType(normalized)}.",
+                            property.SourceName,
+                            property.Line,
+                            property.Column));
+                        continue;
+                    }
+
+                    property.Value = converted;
+                    property.HasDefaultValue = true;
+                }
+            }
+        }
+
         private void ValidateActionBindings()
         {
             foreach (var action in EnumerateAllActions())
             {
-                if (action.IsSetAction)
+                if (action.IsSetAction || IsBuiltInAction(action.Name))
                 {
                     continue;
                 }
 
                 if (!actionRegistry.TryGetAction(action.Name, out var binding))
                 {
-                    diagnostics.Add(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0103", $"Unknown action '{action.Name}'.", string.Empty, action.Line, 1));
+                    AddDiagnostic(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0103", $"Unknown action '{action.Name}'.", string.Empty, action.Line, 1));
                     continue;
                 }
 
                 if (binding.ParameterTypes.Length != action.Arguments.Count)
                 {
-                    diagnostics.Add(new YuspecDiagnostic(
+                    AddDiagnostic(new YuspecDiagnostic(
                         YuspecDiagnosticSeverity.Error,
                         "YSP0105",
                         $"Action '{action.Name}' expects {binding.ParameterTypes.Length} argument(s), got {action.Arguments.Count}.",
@@ -355,7 +475,7 @@ namespace Yuspec.Unity
                     var required = binding.ParameterTypes[index];
                     if (!IsTypeCompatible(required, inferred))
                     {
-                        diagnostics.Add(new YuspecDiagnostic(
+                        AddDiagnostic(new YuspecDiagnostic(
                             YuspecDiagnosticSeverity.Error,
                             "YSP0106",
                             $"Action '{action.Name}' argument {index + 1} type mismatch: expected {required.Name}, got {inferred.Name}.",
@@ -397,35 +517,143 @@ namespace Yuspec.Unity
             ValidateDuplicateHandlers();
             ValidateBehaviors(declarations);
             ValidateScenarios(declarations);
+            ValidateDialogues(declarations);
         }
 
-        private IEnumerable<YuspecActionCall> EnumerateAllActions()
+        private void ValidateStaticAnalysis()
         {
-            foreach (var handlerAction in compiledSpecs.SelectMany(spec => spec.EventHandlers).SelectMany(handler => handler.Actions))
+            var eventHandlers = compiledSpecs.SelectMany(spec => spec.EventHandlers).ToList();
+            var graph = new Dictionary<string, List<EmittedEventEdge>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var handler in eventHandlers)
             {
-                yield return handlerAction;
+                if (!graph.TryGetValue(handler.EventName, out var edges))
+                {
+                    edges = new List<EmittedEventEdge>();
+                    graph[handler.EventName] = edges;
+                }
+
+                foreach (var action in handler.Actions)
+                {
+                    if (TryGetEmittedEvent(action, handler.ActorType, out var emittedEvent))
+                    {
+                        edges.Add(new EmittedEventEdge(emittedEvent, handler.SourceName, action.Line));
+                    }
+                }
+            }
+
+            var reportedCycles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var eventName in graph.Keys.ToList())
+            {
+                VisitEventCycle(eventName, graph, new List<string>(), new HashSet<string>(StringComparer.OrdinalIgnoreCase), reportedCycles);
             }
 
             foreach (var behavior in compiledSpecs.SelectMany(spec => spec.Behaviors))
             {
                 foreach (var state in behavior.States)
                 {
-                    foreach (var action in state.EnterActions)
+                    foreach (var every in state.EveryBlocks)
                     {
-                        yield return action;
-                    }
+                        foreach (var action in every.Actions)
+                        {
+                            if (!TryGetEmittedEvent(action, behavior.EntityType, out var emittedEvent))
+                            {
+                                continue;
+                            }
 
-                    foreach (var action in state.ExitActions)
-                    {
-                        yield return action;
+                            if (CanReachEvent(emittedEvent, emittedEvent, graph, new HashSet<string>(StringComparer.OrdinalIgnoreCase)))
+                            {
+                                AddDiagnostic(new YuspecDiagnostic(
+                                    YuspecDiagnosticSeverity.Error,
+                                    "YSP0402",
+                                    $"Every block in state '{state.Name}' can re-trigger event '{emittedEvent}' indefinitely.",
+                                    every.SourceName,
+                                    every.Line,
+                                    1));
+                            }
+                        }
                     }
+                }
+            }
+        }
 
-                    foreach (var action in state.DoActions)
-                    {
-                        yield return action;
-                    }
+        private void VisitEventCycle(
+            string eventName,
+            Dictionary<string, List<EmittedEventEdge>> graph,
+            List<string> path,
+            HashSet<string> pathSet,
+            HashSet<string> reportedCycles)
+        {
+            if (pathSet.Contains(eventName))
+            {
+                var start = path.IndexOf(eventName);
+                var cycle = path.Skip(Math.Max(0, start)).Concat(new[] { eventName }).ToList();
+                var key = string.Join("->", cycle);
+                if (reportedCycles.Add(key))
+                {
+                    var source = graph.TryGetValue(eventName, out var edges) && edges.Count > 0 ? edges[0] : new EmittedEventEdge(eventName, string.Empty, 1);
+                    AddDiagnostic(new YuspecDiagnostic(
+                        YuspecDiagnosticSeverity.Error,
+                        "YSP0401",
+                        $"Event handler cycle detected: {string.Join(" -> ", cycle)}.",
+                        source.SourceName,
+                        source.Line,
+                        1));
+                }
 
-                    foreach (var action in state.EveryBlocks.SelectMany(block => block.Actions))
+                return;
+            }
+
+            if (!graph.TryGetValue(eventName, out var nextEvents))
+            {
+                return;
+            }
+
+            path.Add(eventName);
+            pathSet.Add(eventName);
+            foreach (var next in nextEvents)
+            {
+                VisitEventCycle(next.EventName, graph, path, pathSet, reportedCycles);
+            }
+
+            path.RemoveAt(path.Count - 1);
+            pathSet.Remove(eventName);
+        }
+
+        private static bool CanReachEvent(string current, string target, Dictionary<string, List<EmittedEventEdge>> graph, HashSet<string> visited)
+        {
+            if (!graph.TryGetValue(current, out var nextEvents))
+            {
+                return false;
+            }
+
+            foreach (var next in nextEvents)
+            {
+                if (string.Equals(next.EventName, target, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                if (visited.Add(next.EventName) && CanReachEvent(next.EventName, target, graph, visited))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private IEnumerable<YuspecActionCall> EnumerateAllActions()
+        {
+            foreach (var action in compiledSpecs.SelectMany(spec => spec.EventHandlers).SelectMany(handler => handler.Actions))
+            {
+                yield return action;
+            }
+
+            foreach (var behavior in compiledSpecs.SelectMany(spec => spec.Behaviors))
+            {
+                foreach (var state in behavior.States)
+                {
+                    foreach (var action in state.EnterActions.Concat(state.ExitActions).Concat(state.DoActions).Concat(state.EveryBlocks.SelectMany(block => block.Actions)))
                     {
                         yield return action;
                     }
@@ -443,13 +671,7 @@ namespace Yuspec.Unity
 
             foreach (var duplicate in duplicates)
             {
-                diagnostics.Add(new YuspecDiagnostic(
-                    YuspecDiagnosticSeverity.Error,
-                    "YSP0112",
-                    $"Duplicate event handler '{duplicate.EventName}'.",
-                    duplicate.SourceName,
-                    duplicate.Line,
-                    1));
+                AddDiagnostic(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0112", $"Duplicate event handler '{duplicate.EventName}'.", duplicate.SourceName, duplicate.Line, 1));
             }
         }
 
@@ -457,10 +679,10 @@ namespace Yuspec.Unity
         {
             foreach (var behavior in compiledSpecs.SelectMany(spec => spec.Behaviors))
             {
-                RequireEntityDeclaration(declarations, behavior.EntityType, string.Empty, behavior.Line, "behavior entity type");
+                RequireEntityDeclaration(declarations, behavior.EntityType, behavior.SourceName, behavior.Line, "behavior entity type");
                 if (behavior.States.Count == 0)
                 {
-                    diagnostics.Add(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0113", $"Behavior '{behavior.Name}' has no states.", string.Empty, behavior.Line, 1));
+                    AddDiagnostic(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0113", $"Behavior '{behavior.Name}' has no states.", behavior.SourceName, behavior.Line, 1));
                     continue;
                 }
 
@@ -471,13 +693,7 @@ namespace Yuspec.Unity
 
                 foreach (var duplicate in duplicateStates)
                 {
-                    diagnostics.Add(new YuspecDiagnostic(
-                        YuspecDiagnosticSeverity.Error,
-                        "YSP0114",
-                        $"Duplicate state '{duplicate.Name}' in behavior '{behavior.Name}'.",
-                        string.Empty,
-                        duplicate.Line,
-                        1));
+                    AddDiagnostic(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0114", $"Duplicate state '{duplicate.Name}' in behavior '{behavior.Name}'.", duplicate.SourceName, duplicate.Line, 1));
                 }
 
                 var stateNames = new HashSet<string>(behavior.States.Select(state => state.Name), StringComparer.OrdinalIgnoreCase);
@@ -487,13 +703,7 @@ namespace Yuspec.Unity
                     {
                         if (!stateNames.Contains(transition.TargetState))
                         {
-                            diagnostics.Add(new YuspecDiagnostic(
-                                YuspecDiagnosticSeverity.Error,
-                                "YSP0115",
-                                $"Unknown transition target '{transition.TargetState}' in behavior '{behavior.Name}'.",
-                                string.Empty,
-                                transition.Line,
-                                1));
+                            AddDiagnostic(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0115", $"Unknown transition target '{transition.TargetState}' in behavior '{behavior.Name}'.", transition.SourceName, transition.Line, 1));
                         }
                     }
 
@@ -501,13 +711,7 @@ namespace Yuspec.Unity
                     {
                         if (!TryParseIntervalSeconds(block.IntervalText, out var interval) || interval <= 0f)
                         {
-                            diagnostics.Add(new YuspecDiagnostic(
-                                YuspecDiagnosticSeverity.Error,
-                                "YSP0116",
-                                $"Invalid interval '{block.IntervalText}' in state '{state.Name}'.",
-                                string.Empty,
-                                block.Line,
-                                1));
+                            AddDiagnostic(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0116", $"Invalid interval '{block.IntervalText}' in state '{state.Name}'.", block.SourceName, block.Line, 1));
                         }
                     }
                 }
@@ -540,13 +744,7 @@ namespace Yuspec.Unity
 
                 foreach (var state in behavior.States.Where(state => !reachable.Contains(state.Name)))
                 {
-                    diagnostics.Add(new YuspecDiagnostic(
-                        YuspecDiagnosticSeverity.Warning,
-                        "YSP0117",
-                        $"State '{state.Name}' in behavior '{behavior.Name}' is unreachable from initial state '{behavior.States[0].Name}'.",
-                        string.Empty,
-                        state.Line,
-                        1));
+                    AddDiagnostic(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0403", $"State '{state.Name}' in behavior '{behavior.Name}' is unreachable from initial state '{behavior.States[0].Name}'.", state.SourceName, state.Line, 1));
                 }
             }
         }
@@ -555,20 +753,18 @@ namespace Yuspec.Unity
         {
             foreach (var scenario in compiledSpecs.SelectMany(spec => spec.Scenarios))
             {
-                foreach (var step in scenario.GivenSteps)
+                foreach (var step in scenario.GivenSteps.Concat(scenario.WhenSteps).Concat(scenario.ExpectSteps))
                 {
                     ValidateScenarioEntityReference(declarations, step.Text, scenario.Name, step.Line);
                 }
+            }
+        }
 
-                foreach (var step in scenario.WhenSteps)
-                {
-                    ValidateScenarioEntityReference(declarations, step.Text, scenario.Name, step.Line);
-                }
-
-                foreach (var step in scenario.ExpectSteps)
-                {
-                    ValidateScenarioEntityReference(declarations, step.Text, scenario.Name, step.Line);
-                }
+        private void ValidateDialogues(Dictionary<string, YuspecEntityDeclaration> declarations)
+        {
+            foreach (var dialogue in compiledSpecs.SelectMany(spec => spec.Dialogues))
+            {
+                RequireEntityDeclaration(declarations, dialogue.EntityType, dialogue.SourceName, dialogue.Line, "dialogue entity type");
             }
         }
 
@@ -580,23 +776,12 @@ namespace Yuspec.Unity
             }
 
             var entityToken = stepText.Split(new[] { ' ', '.' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-            if (string.IsNullOrWhiteSpace(entityToken))
+            if (string.IsNullOrWhiteSpace(entityToken) || declarations.ContainsKey(entityToken))
             {
                 return;
             }
 
-            if (declarations.ContainsKey(entityToken))
-            {
-                return;
-            }
-
-            diagnostics.Add(new YuspecDiagnostic(
-                YuspecDiagnosticSeverity.Error,
-                "YSP0118",
-                $"Scenario '{scenarioName}' references unknown entity '{entityToken}'.",
-                string.Empty,
-                line,
-                1));
+            AddDiagnostic(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0118", $"Scenario '{scenarioName}' references unknown entity '{entityToken}'.", string.Empty, line, 1));
         }
 
         private void ValidateConditionReferences(Dictionary<string, YuspecEntityDeclaration> declarations, YuspecEventHandler handler)
@@ -630,12 +815,47 @@ namespace Yuspec.Unity
                 RequireEntityDeclaration(declarations, action.TargetEntity, handler.SourceName, action.Line, "action target");
                 RequirePropertyDeclaration(declarations, action.TargetEntity, action.TargetProperty, handler.SourceName, action.Line);
                 ValidateValueReference(declarations, action.AssignedValue, handler.SourceName, action.Line);
+                ValidateSetActionType(declarations, action, handler.SourceName);
+                return;
+            }
+
+            if (string.Equals(action.Name, "emit", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(action.Name, "start_dialogue", StringComparison.OrdinalIgnoreCase))
+            {
                 return;
             }
 
             foreach (var argument in action.Arguments)
             {
                 ValidateValueReference(declarations, argument, handler.SourceName, action.Line);
+            }
+        }
+
+        private void ValidateSetActionType(Dictionary<string, YuspecEntityDeclaration> declarations, YuspecActionCall action, string sourceName)
+        {
+            if (!declarations.TryGetValue(action.TargetEntity, out var declaration) ||
+                !declaration.Properties.TryGetValue(action.TargetProperty, out var property) ||
+                property.Type == YuspecPropertyType.Unknown ||
+                action.AssignedValue.Contains("."))
+            {
+                return;
+            }
+
+            var parsed = YuspecSpecParser.ParseLiteral(action.AssignedValue);
+            if (ReferenceEquals(parsed, action.AssignedValue))
+            {
+                return;
+            }
+
+            if (!YuspecSpecParser.TryConvertToYuspecType(parsed, property.Type, out _))
+            {
+                AddDiagnostic(new YuspecDiagnostic(
+                    YuspecDiagnosticSeverity.Error,
+                    "YSP0119",
+                    $"Set action type mismatch for '{action.TargetEntity}.{action.TargetProperty}': expected {YuspecSpecParser.FormatType(property.Type)}, got {YuspecSpecParser.FormatClrType(parsed)}.",
+                    sourceName,
+                    action.Line,
+                    1));
             }
         }
 
@@ -657,49 +877,31 @@ namespace Yuspec.Unity
                 var parts = token.Split(new[] { '.' }, 2);
                 RequireEntityDeclaration(declarations, parts[0], sourceName, line, "value entity");
                 RequirePropertyDeclaration(declarations, parts[0], parts[1], sourceName, line);
-                return;
-            }
-
-            if (declarations.ContainsKey(token))
-            {
-                return;
             }
         }
 
-        private void RequireEntityDeclaration(
-            Dictionary<string, YuspecEntityDeclaration> declarations,
-            string entityType,
-            string sourceName,
-            int line,
-            string usage)
+        private void RequireEntityDeclaration(Dictionary<string, YuspecEntityDeclaration> declarations, string entityType, string sourceName, int line, string usage)
         {
-            if (string.IsNullOrWhiteSpace(entityType) || declarations.ContainsKey(entityType))
+            if (string.IsNullOrWhiteSpace(entityType) ||
+                declarations.ContainsKey(entityType) ||
+                string.Equals(entityType, "self", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(entityType, "actor", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(entityType, "target", StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
 
-            diagnostics.Add(new YuspecDiagnostic(
-                YuspecDiagnosticSeverity.Error,
-                "YSP0110",
-                $"Unknown entity '{entityType}' used as {usage}.",
-                sourceName,
-                line,
-                1));
+            AddDiagnostic(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0110", $"Unknown entity '{entityType}' used as {usage}.", sourceName, line, 1));
         }
 
-        private void RequirePropertyDeclaration(
-            Dictionary<string, YuspecEntityDeclaration> declarations,
-            string entityType,
-            string propertyName,
-            string sourceName,
-            int line)
+        private void RequirePropertyDeclaration(Dictionary<string, YuspecEntityDeclaration> declarations, string entityType, string propertyName, string sourceName, int line)
         {
-            if (string.IsNullOrWhiteSpace(entityType) || string.IsNullOrWhiteSpace(propertyName))
-            {
-                return;
-            }
-
-            if (!declarations.TryGetValue(entityType, out var declaration))
+            if (string.IsNullOrWhiteSpace(entityType) ||
+                string.IsNullOrWhiteSpace(propertyName) ||
+                string.Equals(entityType, "self", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(entityType, "actor", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(entityType, "target", StringComparison.OrdinalIgnoreCase) ||
+                !declarations.TryGetValue(entityType, out var declaration))
             {
                 return;
             }
@@ -712,16 +914,10 @@ namespace Yuspec.Unity
                 return;
             }
 
-            diagnostics.Add(new YuspecDiagnostic(
-                YuspecDiagnosticSeverity.Error,
-                "YSP0111",
-                $"Unknown property '{entityType}.{propertyName}'.",
-                sourceName,
-                line,
-                1));
+            AddDiagnostic(new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, "YSP0111", $"Unknown property '{entityType}.{propertyName}'.", sourceName, line, 1));
         }
 
-        private void ApplyDeclarationsToRegisteredEntities(bool overwriteExisting = false)
+        private void ApplyDeclarationsToRegisteredEntities(bool overwriteExisting)
         {
             foreach (var entity in entitiesById.Values)
             {
@@ -729,32 +925,34 @@ namespace Yuspec.Unity
             }
         }
 
-        private void ApplyDeclaration(YuspecEntity entity, bool overwriteExisting = false)
+        private void ApplyDeclaration(YuspecEntity entity, bool overwriteExisting)
         {
-            var declaration = compiledSpecs
-                .SelectMany(spec => spec.Entities)
-                .FirstOrDefault(candidate => string.Equals(candidate.EntityType, entity.EntityType, StringComparison.OrdinalIgnoreCase));
-
+            var declaration = GetEntityDeclaration(entity.EntityType);
             if (declaration == null)
             {
                 return;
             }
 
-            foreach (var property in declaration.Properties)
+            foreach (var property in declaration.Properties.Values)
             {
-                if (string.Equals(property.Key, "state", StringComparison.OrdinalIgnoreCase))
+                if (!property.HasDefaultValue)
+                {
+                    continue;
+                }
+
+                if (string.Equals(property.Name, "state", StringComparison.OrdinalIgnoreCase))
                 {
                     if (overwriteExisting || string.IsNullOrEmpty(entity.CurrentState))
                     {
-                        entity.SetProperty(property.Key, property.Value);
+                        entity.SetPropertyFromRuntime(property.Name, CloneValue(property.Value));
                     }
 
                     continue;
                 }
 
-                if (overwriteExisting || !entity.Properties.ContainsKey(property.Key))
+                if (overwriteExisting || !entity.Properties.ContainsKey(property.Name))
                 {
-                    entity.SetProperty(property.Key, property.Value);
+                    entity.SetPropertyFromRuntime(property.Name, CloneValue(property.Value));
                 }
             }
         }
@@ -776,8 +974,7 @@ namespace Yuspec.Unity
                 return true;
             }
 
-            return target != null &&
-                   string.Equals(target.EntityType, handler.TargetType, StringComparison.OrdinalIgnoreCase);
+            return target != null && string.Equals(target.EntityType, handler.TargetType, StringComparison.OrdinalIgnoreCase);
         }
 
         private bool EvaluateCondition(YuspecCondition condition, YuspecEntity actor, YuspecEntity target)
@@ -791,12 +988,10 @@ namespace Yuspec.Unity
             {
                 var left = ResolveEntity(condition.LeftEntity, actor, target);
                 var right = ResolveEntity(condition.RightEntity, actor, target);
-                if (left == null || right == null)
-                {
-                    return false;
-                }
-
-                return right.TryGetProperty(condition.RightValue, out var requiredValue) && left.HasValue(requiredValue?.ToString());
+                return left != null &&
+                       right != null &&
+                       right.TryGetProperty(condition.RightValue, out var requiredValue) &&
+                       left.HasValue(requiredValue?.ToString());
             }
 
             if (condition.Kind == YuspecConditionKind.Equals)
@@ -818,28 +1013,161 @@ namespace Yuspec.Unity
         {
             if (action.IsSetAction)
             {
-                var targetEntity = ResolveEntity(action.TargetEntity, actor, target);
-                if (targetEntity == null)
-                {
-                    AddRuntimeDiagnostic("YSP0400", $"Unknown entity '{action.TargetEntity}' for set action.", handler.SourceName, action.Line);
-                    return;
-                }
-
-                var value = ResolveValue(action.AssignedValue, actor, target);
-                targetEntity.SetProperty(action.TargetProperty, value);
-                AddTrace(YuspecTraceKind.ActionExecuted, $"set {targetEntity.EntityId}.{action.TargetProperty} = {value}", handler.SourceName, action.Line);
+                ExecuteSetAction(action, actor, target, handler);
                 return;
             }
 
-            var args = action.Arguments.Select(argument => ResolveValue(argument, actor, target)).ToArray();
+            if (string.Equals(action.Name, "emit", StringComparison.OrdinalIgnoreCase))
+            {
+                ExecuteEmitAction(action, actor, target);
+                return;
+            }
+
+            if (string.Equals(action.Name, "start_dialogue", StringComparison.OrdinalIgnoreCase))
+            {
+                ExecuteStartDialogueAction(action, actor, target, handler.SourceName);
+                return;
+            }
+
+            var args = ResolveActionArguments(action, actor, target);
             AddTrace(YuspecTraceKind.ActionExecuted, $"{action.Name}({string.Join(", ", args.Select(arg => arg?.ToString() ?? "null"))})", handler.SourceName, action.Line);
             ExecuteAction(action.Name, args);
+        }
+
+        private void ExecuteSetAction(YuspecActionCall action, YuspecEntity actor, YuspecEntity target, YuspecEventHandler handler)
+        {
+            var targetEntity = ResolveEntity(action.TargetEntity, actor, target);
+            if (targetEntity == null)
+            {
+                AddRuntimeDiagnostic("YSP0400", $"Unknown entity '{action.TargetEntity}' for set action.", handler.SourceName, action.Line);
+                return;
+            }
+
+            var value = ResolveValue(action.AssignedValue, actor, target);
+            if (TryGetEntityPropertyDeclaration(targetEntity.EntityType, action.TargetProperty, out var propertyDeclaration))
+            {
+                if (!YuspecSpecParser.TryConvertToYuspecType(value, propertyDeclaration.Type, out var converted))
+                {
+                    AddRuntimeDiagnostic(
+                        "YSP0404",
+                        $"Type mismatch for set {targetEntity.EntityType}.{action.TargetProperty}: expected {YuspecSpecParser.FormatType(propertyDeclaration.Type)}, got {YuspecSpecParser.FormatClrType(value)}.",
+                        handler.SourceName,
+                        action.Line);
+                    return;
+                }
+
+                value = converted;
+            }
+
+            targetEntity.SetPropertyFromRuntime(action.TargetProperty, value);
+            TryWriteBackScriptableObject(targetEntity.EntityType, action.TargetProperty, value, handler.SourceName, action.Line);
+            AddTrace(YuspecTraceKind.ActionExecuted, $"set {targetEntity.EntityId}.{action.TargetProperty} = {FormatValue(value)}", handler.SourceName, action.Line);
+        }
+
+        private void ExecuteEmitAction(YuspecActionCall action, YuspecEntity actor, YuspecEntity target)
+        {
+            if (action.Arguments.Count == 0)
+            {
+                AddRuntimeDiagnostic("YSP0405", "emit requires an event name.", string.Empty, action.Line);
+                return;
+            }
+
+            var eventText = ResolveValue(action.Arguments[0], actor, target)?.ToString();
+            if (string.IsNullOrWhiteSpace(eventText))
+            {
+                AddRuntimeDiagnostic("YSP0406", "emit event name is empty.", string.Empty, action.Line);
+                return;
+            }
+
+            if (!eventText.Contains(".") && actor != null)
+            {
+                eventText = $"{actor.EntityType}.{eventText}";
+            }
+
+            var emittedTarget = action.Arguments.Count > 1 ? ResolveEntity(action.Arguments[1], actor, target) : target;
+            Emit(eventText, actor, emittedTarget);
+        }
+
+        private void ExecuteStartDialogueAction(YuspecActionCall action, YuspecEntity actor, YuspecEntity target, string sourceName)
+        {
+            if (action.Arguments.Count != 1)
+            {
+                AddRuntimeDiagnostic("YSP0601", "start_dialogue requires exactly one dialogue name.", sourceName, action.Line);
+                return;
+            }
+
+            var dialogueName = ResolveValue(action.Arguments[0], actor, target)?.ToString();
+            var dialogue = compiledSpecs.SelectMany(spec => spec.Dialogues)
+                .FirstOrDefault(candidate => string.Equals(candidate.Name, dialogueName, StringComparison.OrdinalIgnoreCase));
+            if (dialogue == null)
+            {
+                AddRuntimeDiagnostic("YSP0602", $"Unknown dialogue '{dialogueName}'.", sourceName, action.Line);
+                return;
+            }
+
+            var speaker = target ?? actor;
+            dialogueRuntime.StartDialogue(dialogue, speaker);
+            AddTrace(YuspecTraceKind.ActionExecuted, $"start_dialogue {dialogue.Name}", sourceName, action.Line);
+        }
+
+        private object[] ResolveActionArguments(YuspecActionCall action, YuspecEntity actor, YuspecEntity target)
+        {
+            if (!actionRegistry.TryGetAction(action.Name, out var binding) || binding.ParameterTypes.Length != action.Arguments.Count)
+            {
+                return action.Arguments.Select(argument => ResolveValue(argument, actor, target)).ToArray();
+            }
+
+            var args = new object[action.Arguments.Count];
+            for (var i = 0; i < action.Arguments.Count; i++)
+            {
+                var raw = ResolveValue(action.Arguments[i], actor, target);
+                args[i] = ConvertToType(raw, binding.ParameterTypes[i]);
+            }
+
+            return args;
+        }
+
+        private static object ConvertToType(object value, Type targetType)
+        {
+            if (value == null)
+            {
+                return null;
+            }
+
+            var type = Nullable.GetUnderlyingType(targetType) ?? targetType;
+            if (type.IsInstanceOfType(value))
+            {
+                return value;
+            }
+
+            if (type == typeof(float) && value is int intValue)
+            {
+                return (float)intValue;
+            }
+
+            if (type == typeof(string[]) && value is List<string> list)
+            {
+                return list.ToArray();
+            }
+
+            if (type == typeof(List<string>) && value is string[] array)
+            {
+                return array.ToList();
+            }
+
+            try
+            {
+                return Convert.ChangeType(value, type, CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                return value;
+            }
         }
 
         private object ResolveValue(string token, YuspecEntity actor, YuspecEntity target)
         {
             token = token?.Trim() ?? string.Empty;
-
             if (token.Contains("."))
             {
                 var parts = token.Split(new[] { '.' }, 2);
@@ -851,12 +1179,7 @@ namespace Yuspec.Unity
             }
 
             var resolvedEntity = ResolveEntity(token, actor, target);
-            if (resolvedEntity != null)
-            {
-                return resolvedEntity;
-            }
-
-            return YuspecSpecParser.ParseLiteral(token);
+            return resolvedEntity != null ? (object)resolvedEntity : YuspecSpecParser.ParseLiteral(token);
         }
 
         private YuspecEntity ResolveEntity(string reference, YuspecEntity actor, YuspecEntity target)
@@ -899,64 +1222,14 @@ namespace Yuspec.Unity
             return entitiesById.Values.FirstOrDefault(entity => string.Equals(entity.EntityType, reference, StringComparison.OrdinalIgnoreCase));
         }
 
-        private static Type ResolvePotentialLiteralType(string token)
-        {
-            if (string.IsNullOrWhiteSpace(token))
-            {
-                return null;
-            }
-
-            var trimmed = token.Trim();
-            if (trimmed.Contains(".") || Regex.IsMatch(trimmed, @"^[A-Za-z_][A-Za-z0-9_]*$"))
-            {
-                return null;
-            }
-
-            var value = YuspecSpecParser.ParseLiteral(trimmed);
-            return ReferenceEquals(value, trimmed) ? null : value?.GetType();
-        }
-
-        private static bool IsTypeCompatible(Type expectedType, Type actualType)
-        {
-            if (expectedType.IsAssignableFrom(actualType))
-            {
-                return true;
-            }
-
-            var normalizedExpected = Nullable.GetUnderlyingType(expectedType) ?? expectedType;
-
-            if (normalizedExpected == typeof(string))
-            {
-                return true;
-            }
-
-            if (normalizedExpected == typeof(float) && (actualType == typeof(int) || actualType == typeof(double) || actualType == typeof(float)))
-            {
-                return true;
-            }
-
-            if (normalizedExpected == typeof(int) && actualType == typeof(int))
-            {
-                return true;
-            }
-
-            if (normalizedExpected == typeof(bool) && actualType == typeof(bool))
-            {
-                return true;
-            }
-
-            return false;
-        }
-
-        private void BuildStateMachineSessions()
+        private void BuildStateMachineSessions(bool preserveCurrentState)
         {
             stateMachineSessions.Clear();
             stateMachineStatuses.Clear();
 
-            var behaviors = compiledSpecs.SelectMany(spec => spec.Behaviors).ToList();
             foreach (var entity in entitiesById.Values)
             {
-                foreach (var behavior in behaviors.Where(behavior => string.Equals(behavior.EntityType, entity.EntityType, StringComparison.OrdinalIgnoreCase)))
+                foreach (var behavior in compiledSpecs.SelectMany(spec => spec.Behaviors).Where(behavior => string.Equals(behavior.EntityType, entity.EntityType, StringComparison.OrdinalIgnoreCase)))
                 {
                     var initial = behavior.States.FirstOrDefault();
                     if (initial == null)
@@ -964,12 +1237,21 @@ namespace Yuspec.Unity
                         continue;
                     }
 
-                    var session = new StateMachineSession(behavior, entity, initial);
+                    var selected = initial;
+                    if (preserveCurrentState && !string.IsNullOrWhiteSpace(entity.CurrentState))
+                    {
+                        selected = behavior.States.FirstOrDefault(state => string.Equals(state.Name, entity.CurrentState, StringComparison.OrdinalIgnoreCase)) ?? initial;
+                    }
+
+                    var session = new StateMachineSession(behavior, entity, selected);
                     stateMachineSessions.Add(session);
                     stateMachineStatuses.Add(session.Status);
+                    entity.CurrentState = selected.Name;
 
-                    entity.CurrentState = initial.Name;
-                    ExecuteActions(initial.EnterActions, entity, entity, behavior.Name, initial.Line);
+                    if (!preserveCurrentState || selected == initial)
+                    {
+                        ExecuteActions(selected.EnterActions, entity, entity, behavior.Name, selected.SourceName, selected.Line);
+                    }
                 }
             }
         }
@@ -990,7 +1272,7 @@ namespace Yuspec.Unity
                         continue;
                     }
 
-                    TransitionTo(session, transition.TargetState, transition.Line);
+                    TransitionTo(session, transition.TargetState, transition.SourceName, transition.Line);
                     break;
                 }
             }
@@ -1004,7 +1286,6 @@ namespace Yuspec.Unity
             }
 
             var normalized = triggerText.Trim();
-
             if (TryEvaluateSelfComparison(normalized, session.Entity))
             {
                 return true;
@@ -1016,17 +1297,7 @@ namespace Yuspec.Unity
             }
 
             var eventSuffix = eventName?.Split('.').LastOrDefault();
-            if (!string.IsNullOrWhiteSpace(eventSuffix) && string.Equals(normalized, eventSuffix, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            if (actor != null && actor == session.Entity && !string.IsNullOrWhiteSpace(eventSuffix) && string.Equals(normalized, eventSuffix, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            return false;
+            return !string.IsNullOrWhiteSpace(eventSuffix) && string.Equals(normalized, eventSuffix, StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool TryEvaluateSelfComparison(string text, YuspecEntity entity)
@@ -1046,16 +1317,9 @@ namespace Yuspec.Unity
                     continue;
                 }
 
-                var left = text.Substring(0, opIndex).Trim();
+                var property = text.Substring("self.".Length, opIndex - "self.".Length).Trim();
                 var right = text.Substring(opIndex + marker.Length).Trim();
-                var property = left.Substring("self.".Length);
-                if (!entity.TryGetProperty(property, out var leftValue))
-                {
-                    return false;
-                }
-
-                var rightValue = YuspecSpecParser.ParseLiteral(right);
-                return CompareValues(leftValue, rightValue, op);
+                return entity.TryGetProperty(property, out var leftValue) && CompareValues(leftValue, YuspecSpecParser.ParseLiteral(right), op);
             }
 
             return false;
@@ -1087,37 +1351,33 @@ namespace Yuspec.Unity
             }
         }
 
-        private void TransitionTo(StateMachineSession session, string targetStateName, int line)
+        private void TransitionTo(StateMachineSession session, string targetStateName, string sourceName, int line)
         {
             var targetState = session.Behavior.States.FirstOrDefault(state => string.Equals(state.Name, targetStateName, StringComparison.OrdinalIgnoreCase));
             if (targetState == null)
             {
-                AddRuntimeDiagnostic("YSP0500", $"Unknown transition target '{targetStateName}' in behavior '{session.Behavior.Name}'.", string.Empty, line);
+                AddRuntimeDiagnostic("YSP0500", $"Unknown transition target '{targetStateName}' in behavior '{session.Behavior.Name}'.", sourceName, line);
                 return;
             }
 
-            ExecuteActions(session.CurrentState.ExitActions, session.Entity, session.Entity, session.Behavior.Name, line);
+            ExecuteActions(session.CurrentState.ExitActions, session.Entity, session.Entity, session.Behavior.Name, sourceName, line);
             session.CurrentState = targetState;
             session.StateElapsed = 0f;
             session.EveryTimers.Clear();
             session.LastTransitionTime = Application.isPlaying ? Time.time : 0f;
             session.Entity.CurrentState = targetState.Name;
-
             session.Status.CurrentState = targetState.Name;
             session.Status.StateElapsed = 0f;
             session.Status.LastTransitionTime = session.LastTransitionTime;
-
-            AddTrace(YuspecTraceKind.ActionExecuted, $"state transition {session.Entity.EntityId}: {targetState.Name}", string.Empty, line);
-            ExecuteActions(targetState.EnterActions, session.Entity, session.Entity, session.Behavior.Name, line);
+            AddTrace(YuspecTraceKind.ActionExecuted, $"state transition {session.Entity.EntityId}: {targetState.Name}", sourceName, line);
+            ExecuteActions(targetState.EnterActions, session.Entity, session.Entity, session.Behavior.Name, targetState.SourceName, targetState.Line);
         }
 
-        private void ExecuteActions(IEnumerable<YuspecActionCall> actions, YuspecEntity actor, YuspecEntity target, string sourceName, int line)
+        private void ExecuteActions(IEnumerable<YuspecActionCall> actions, YuspecEntity actor, YuspecEntity target, string eventName, string sourceName, int line)
         {
             foreach (var action in actions)
             {
-                var actorType = actor != null ? actor.EntityType : string.Empty;
-                var targetType = target != null ? target.EntityType : string.Empty;
-                ExecuteActionCall(action, actor, target, new YuspecEventHandler(actorType, sourceName, targetType, YuspecCondition.None, sourceName, line));
+                ExecuteActionCall(action, actor, target, new YuspecEventHandler(actor?.EntityType ?? string.Empty, eventName, target?.EntityType ?? string.Empty, YuspecCondition.None, sourceName, line));
             }
         }
 
@@ -1132,13 +1392,14 @@ namespace Yuspec.Unity
             var normalized = intervalText.Trim().ToLowerInvariant();
             if (normalized.EndsWith("ms", StringComparison.Ordinal))
             {
-                if (float.TryParse(normalized.Substring(0, normalized.Length - 2), NumberStyles.Float, CultureInfo.InvariantCulture, out var milliseconds))
-                {
-                    seconds = milliseconds / 1000f;
-                    return true;
-                }
+                return float.TryParse(normalized.Substring(0, normalized.Length - 2), NumberStyles.Float, CultureInfo.InvariantCulture, out var milliseconds) &&
+                       (seconds = milliseconds / 1000f) >= 0f;
+            }
 
-                return false;
+            if (normalized.EndsWith("min", StringComparison.Ordinal))
+            {
+                return float.TryParse(normalized.Substring(0, normalized.Length - 3), NumberStyles.Float, CultureInfo.InvariantCulture, out var minutes) &&
+                       (seconds = minutes * 60f) >= 0f;
             }
 
             if (normalized.EndsWith("s", StringComparison.Ordinal))
@@ -1152,7 +1413,6 @@ namespace Yuspec.Unity
         private YuspecScenarioResult RunScenario(YuspecScenarioDefinition scenario)
         {
             var result = new YuspecScenarioResult { Name = scenario.Name, Passed = true, Message = "Passed" };
-
             foreach (var given in scenario.GivenSteps)
             {
                 ApplyGiven(given, result);
@@ -1179,9 +1439,9 @@ namespace Yuspec.Unity
         private void ApplyGiven(YuspecScenarioStepDefinition step, YuspecScenarioResult result)
         {
             var text = step.Text;
-            if (text.Contains(" has ", StringComparison.OrdinalIgnoreCase))
+            if (text.IndexOf(" has ", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                var parts = text.Split(new[] { " has " }, StringSplitOptions.None);
+                var parts = Regex.Split(text, "\\s+has\\s+", RegexOptions.IgnoreCase);
                 var entity = ResolveEntity(parts[0].Trim(), null, null);
                 if (entity == null)
                 {
@@ -1202,11 +1462,11 @@ namespace Yuspec.Unity
                     inventory.Add(item);
                 }
 
-                entity.SetProperty("inventory", inventory);
+                entity.SetPropertyFromRuntime("inventory", inventory);
                 return;
             }
 
-            if (text.Contains("=", StringComparison.Ordinal))
+            if (text.Contains("="))
             {
                 var eqIndex = text.IndexOf('=');
                 var left = text.Substring(0, eqIndex).Trim();
@@ -1240,7 +1500,6 @@ namespace Yuspec.Unity
             var actorRef = match.Groups[1].Value;
             var eventName = match.Groups[2].Value;
             var targetRef = match.Groups[3].Success ? match.Groups[3].Value : string.Empty;
-
             var actor = ResolveEntity(actorRef, null, null);
             var target = string.IsNullOrWhiteSpace(targetRef) ? null : ResolveEntity(targetRef, null, null);
             if (actor == null)
@@ -1274,65 +1533,238 @@ namespace Yuspec.Unity
                 return;
             }
 
-            if (!string.Equals(actual?.ToString(), expected?.ToString(), StringComparison.OrdinalIgnoreCase))
+            if (!ValuesEqual(actual, expected))
             {
                 result.Passed = false;
-                result.Failures.Add($"expect failed; {match.Groups[1].Value}.{property} expected '{expected}', actual '{actual}'");
+                result.Failures.Add($"expect failed; {match.Groups[1].Value}.{property} expected '{FormatValue(expected)}', actual '{FormatValue(actual)}'");
             }
         }
 
-        private sealed class StateMachineSession
+        private bool ReloadSpecAtIndex(int index, string sourceName, string sourceText)
         {
-            public YuspecBehaviorDefinition Behavior;
-            public YuspecEntity Entity;
-            public YuspecStateDefinition CurrentState;
-            public float StateElapsed;
-            public float LastTransitionTime;
-            public readonly YuspecStateMachineStatus Status;
-            public readonly Dictionary<YuspecTimedActionBlock, float> EveryTimers = new Dictionary<YuspecTimedActionBlock, float>();
-
-            public StateMachineSession(YuspecBehaviorDefinition behavior, YuspecEntity entity, YuspecStateDefinition initialState)
+            if (index < 0 || index >= compiledSpecs.Count)
             {
-                Behavior = behavior;
-                Entity = entity;
-                CurrentState = initialState;
-                StateElapsed = 0f;
-                LastTransitionTime = Application.isPlaying ? Time.time : 0f;
+                return false;
+            }
 
-                Status = new YuspecStateMachineStatus
+            var oldHandlers = compiledSpecs[index].EventHandlers.Count;
+            diagnostics.RemoveAll(diagnostic => string.Equals(diagnostic.source, sourceName, StringComparison.OrdinalIgnoreCase));
+            var parser = new YuspecSpecParser();
+            var compiledSpec = parser.Parse(sourceName, sourceText);
+            compiledSpecs[index] = compiledSpec;
+            foreach (var diagnostic in parser.Diagnostics)
+            {
+                AddDiagnostic(diagnostic);
+            }
+
+            LoadScriptableObjectBindings();
+            ValidateActionBindings();
+            ValidateStrictReferences();
+            ValidateStaticAnalysis();
+            ApplyDeclarationsToRegisteredEntities(false);
+            BuildStateMachineSessions(true);
+            CaptureSpecHashes();
+
+            var updatedHandlers = compiledSpec.EventHandlers.Count;
+            Debug.Log($"[YUSPEC] Hot reloaded: {Path.GetFileName(sourceName)} — {updatedHandlers} handlers updated");
+            AddDiagnostic(new YuspecDiagnostic(YuspecDiagnosticSeverity.Info, "YSP0600", $"Hot reloaded: {Path.GetFileName(sourceName)} - {updatedHandlers} handlers updated", sourceName, 1, 1));
+            return true;
+        }
+
+        private void DrainHotReloadQueue()
+        {
+            if (!hotReload)
+            {
+                return;
+            }
+
+            var reloaded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            while (pendingHotReloadPaths.TryDequeue(out var path))
+            {
+                if (!reloaded.Add(path))
                 {
-                    BehaviorName = behavior.Name,
-                    EntityId = entity.EntityId,
-                    EntityType = entity.EntityType,
-                    CurrentState = initialState.Name,
-                    StateElapsed = 0f,
-                    LastTransitionTime = LastTransitionTime
+                    continue;
+                }
+
+                var index = FindCompiledSpecIndexByPath(path);
+                if (index < 0 || !File.Exists(path))
+                {
+                    continue;
+                }
+
+                ReloadSpecAtIndex(index, GetSpecSourceName(compiledSpecAssets[index]), File.ReadAllText(path));
+            }
+        }
+
+        private int FindCompiledSpecIndexByPath(string path)
+        {
+            for (var i = 0; i < compiledSpecAssets.Count; i++)
+            {
+                var specPath = GetSpecPath(compiledSpecAssets[i]);
+                if (!string.IsNullOrWhiteSpace(specPath) && string.Equals(Path.GetFullPath(specPath), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private void ConfigureFileWatchers()
+        {
+            DisposeFileWatchers();
+            if (!hotReload)
+            {
+                return;
+            }
+
+            foreach (var path in compiledSpecAssets.Select(GetSpecPath).Where(path => !string.IsNullOrWhiteSpace(path) && path.EndsWith(".yuspec", StringComparison.OrdinalIgnoreCase)))
+            {
+                var fullPath = Path.GetFullPath(path);
+                var directory = Path.GetDirectoryName(fullPath);
+                var fileName = Path.GetFileName(fullPath);
+                if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory) || fileWatchers.ContainsKey(fullPath))
+                {
+                    continue;
+                }
+
+                var watcher = new FileSystemWatcher(directory, fileName)
+                {
+                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName,
+                    EnableRaisingEvents = true
                 };
+                watcher.Changed += (_, __) => pendingHotReloadPaths.Enqueue(fullPath);
+                watcher.Created += (_, __) => pendingHotReloadPaths.Enqueue(fullPath);
+                watcher.Renamed += (_, __) => pendingHotReloadPaths.Enqueue(fullPath);
+                fileWatchers[fullPath] = watcher;
             }
         }
 
-        private void AddTrace(YuspecTraceKind kind, string message, string sourceName = "", int line = 0)
+        private void DisposeFileWatchers()
         {
-            var time = Application.isPlaying ? Time.time : 0f;
-            var entry = new YuspecTraceEntry(kind, message, sourceName, line, time);
-            traceEntries.Add(entry);
-            debugTrace.Add(entry.ToString());
-            if (traceEntries.Count > maxRecentEvents)
+            foreach (var watcher in fileWatchers.Values)
             {
-                traceEntries.RemoveAt(0);
+                watcher.EnableRaisingEvents = false;
+                watcher.Dispose();
             }
 
-            if (debugTrace.Count > maxRecentEvents)
+            fileWatchers.Clear();
+        }
+
+        private UnityEngine.Object LoadScriptableObject(string assetPath)
+        {
+            if (scriptableObjectCache.TryGetValue(assetPath, out var cached))
             {
-                debugTrace.RemoveAt(0);
+                return cached;
+            }
+
+            UnityEngine.Object asset = null;
+#if UNITY_EDITOR
+            asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(assetPath);
+#else
+            if (assetPath.StartsWith("Assets/Resources/", StringComparison.OrdinalIgnoreCase))
+            {
+                var resourcesPath = assetPath.Substring("Assets/Resources/".Length);
+                resourcesPath = Path.ChangeExtension(resourcesPath, null);
+                asset = Resources.Load(resourcesPath);
+            }
+#endif
+            scriptableObjectCache[assetPath] = asset;
+            return asset;
+        }
+
+        private static bool TryGetMemberValue(UnityEngine.Object asset, string memberName, out object value)
+        {
+            value = null;
+            var type = asset.GetType();
+            var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            var field = type.GetField(memberName, flags);
+            if (field != null)
+            {
+                value = field.GetValue(asset);
+                return true;
+            }
+
+            var property = type.GetProperty(memberName, flags);
+            if (property != null && property.GetIndexParameters().Length == 0 && property.CanRead)
+            {
+                value = property.GetValue(asset, null);
+                return true;
+            }
+
+            return false;
+        }
+
+        private void TryWriteBackScriptableObject(string entityType, string propertyName, object value, string sourceName, int line)
+        {
+            var declaration = GetEntityDeclaration(entityType);
+            if (declaration == null || string.IsNullOrWhiteSpace(declaration.ScriptableObjectPath))
+            {
+                return;
+            }
+
+            var asset = LoadScriptableObject(declaration.ScriptableObjectPath);
+            if (asset == null)
+            {
+                return;
+            }
+
+            if (!TrySetMemberValue(asset, propertyName, value, out var reason))
+            {
+                AddRuntimeDiagnostic("YSP0504", reason, sourceName, line);
             }
         }
 
-        private void AddRuntimeDiagnostic(string code, string message, string sourceName, int line)
+        private static bool TrySetMemberValue(UnityEngine.Object asset, string memberName, object value, out string reason)
         {
-            var diagnostic = new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, code, message, sourceName, line, 1);
-            diagnostics.Add(diagnostic);
-            AddTrace(YuspecTraceKind.Diagnostic, diagnostic.ToString(), sourceName, line);
+            reason = string.Empty;
+            var type = asset.GetType();
+            var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            var classMutable = type.GetCustomAttribute<YuspecMutableAttribute>() != null;
+            var field = type.GetField(memberName, flags);
+            if (field != null)
+            {
+                if (!classMutable && field.GetCustomAttribute<YuspecMutableAttribute>() == null)
+                {
+                    reason = $"ScriptableObject field '{memberName}' is not marked [YuspecMutable].";
+                    return false;
+                }
+
+                field.SetValue(asset, ConvertToType(value, field.FieldType));
+#if UNITY_EDITOR
+                EditorUtility.SetDirty(asset);
+#endif
+                return true;
+            }
+
+            var property = type.GetProperty(memberName, flags);
+            if (property != null && property.GetIndexParameters().Length == 0 && property.CanWrite)
+            {
+                if (!classMutable && property.GetCustomAttribute<YuspecMutableAttribute>() == null)
+                {
+                    reason = $"ScriptableObject property '{memberName}' is not marked [YuspecMutable].";
+                    return false;
+                }
+
+                property.SetValue(asset, ConvertToType(value, property.PropertyType), null);
+#if UNITY_EDITOR
+                EditorUtility.SetDirty(asset);
+#endif
+                return true;
+            }
+
+            reason = $"ScriptableObject has no writable field or property '{memberName}'.";
+            return false;
+        }
+
+        private static object NormalizeScriptableObjectValue(object value)
+        {
+            if (value is string[] array)
+            {
+                return array.ToList();
+            }
+
+            return value;
         }
 
         private static string GetSpecText(UnityEngine.Object spec)
@@ -1344,10 +1776,40 @@ namespace Yuspec.Unity
 
             if (spec is YuspecSpecAsset specAsset)
             {
+                if (!string.IsNullOrWhiteSpace(specAsset.SourcePath) && File.Exists(specAsset.SourcePath))
+                {
+                    return File.ReadAllText(specAsset.SourcePath);
+                }
+
                 return specAsset.SourceText;
             }
 
             return null;
+        }
+
+        private static string GetSpecSourceName(UnityEngine.Object spec)
+        {
+            if (spec is YuspecSpecAsset specAsset && !string.IsNullOrWhiteSpace(specAsset.SourcePath))
+            {
+                return specAsset.SourcePath;
+            }
+
+            var path = GetSpecPath(spec);
+            return string.IsNullOrWhiteSpace(path) ? spec.name : path;
+        }
+
+        private static string GetSpecPath(UnityEngine.Object spec)
+        {
+            if (spec is YuspecSpecAsset specAsset && !string.IsNullOrWhiteSpace(specAsset.SourcePath))
+            {
+                return specAsset.SourcePath;
+            }
+
+#if UNITY_EDITOR
+            return spec != null ? AssetDatabase.GetAssetPath(spec) : string.Empty;
+#else
+            return string.Empty;
+#endif
         }
 
         private void TickHotReload(float deltaTime)
@@ -1371,52 +1833,190 @@ namespace Yuspec.Unity
         private void CaptureSpecHashes()
         {
             specContentHashes.Clear();
-            if (specs == null)
+            foreach (var spec in compiledSpecAssets)
             {
-                return;
-            }
-
-            foreach (var spec in specs)
-            {
-                if (spec == null)
-                {
-                    continue;
-                }
-
                 specContentHashes[spec] = GetSpecHash(spec);
             }
         }
 
-        private bool HaveSpecHashesChanged()
-        {
-            if (specs == null)
-            {
-                return specContentHashes.Count != 0;
-            }
-
-            var seen = new HashSet<UnityEngine.Object>();
-            foreach (var spec in specs)
-            {
-                if (spec == null)
-                {
-                    continue;
-                }
-
-                seen.Add(spec);
-                var currentHash = GetSpecHash(spec);
-                if (!specContentHashes.TryGetValue(spec, out var previousHash) || previousHash != currentHash)
-                {
-                    return true;
-                }
-            }
-
-            return specContentHashes.Keys.Any(spec => !seen.Contains(spec));
-        }
-
         private static int GetSpecHash(UnityEngine.Object spec)
         {
-            var text = GetSpecText(spec) ?? string.Empty;
-            return StringComparer.Ordinal.GetHashCode(text);
+            return StringComparer.Ordinal.GetHashCode(GetSpecText(spec) ?? string.Empty);
+        }
+
+        private void AddRuntimeDiagnostic(string code, string message, string sourceName, int line)
+        {
+            var diagnostic = new YuspecDiagnostic(YuspecDiagnosticSeverity.Error, code, message, sourceName, line, 1);
+            AddDiagnostic(diagnostic);
+            AddTrace(YuspecTraceKind.Diagnostic, diagnostic.ToString(), sourceName, line);
+        }
+
+        private void AddDiagnostic(YuspecDiagnostic diagnostic)
+        {
+            diagnostics.Add(diagnostic);
+            if (diagnostic.severity == YuspecDiagnosticSeverity.Error)
+            {
+                global::Yuspec.YuspecDiagnosticReporter.Report(
+                    string.IsNullOrWhiteSpace(diagnostic.source) ? "YUSPEC" : diagnostic.source,
+                    diagnostic.line <= 0 ? 1 : diagnostic.line,
+                    diagnostic.column <= 0 ? 1 : diagnostic.column,
+                    diagnostic.message);
+            }
+        }
+
+        private void AddTrace(YuspecTraceKind kind, string message, string sourceName = "", int line = 0)
+        {
+            var time = Application.isPlaying ? Time.time : 0f;
+            var entry = new YuspecTraceEntry(kind, message, sourceName, line, time);
+            traceEntries.Add(entry);
+            debugTrace.Add(entry.ToString());
+            if (traceEntries.Count > maxRecentEvents)
+            {
+                traceEntries.RemoveAt(0);
+            }
+
+            if (debugTrace.Count > maxRecentEvents)
+            {
+                debugTrace.RemoveAt(0);
+            }
+        }
+
+        private static bool IsBuiltInAction(string actionName)
+        {
+            return string.Equals(actionName, "emit", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(actionName, "start_dialogue", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool TryGetEmittedEvent(YuspecActionCall action, string defaultActorType, out string eventName)
+        {
+            eventName = string.Empty;
+            if (!string.Equals(action.Name, "emit", StringComparison.OrdinalIgnoreCase) || action.Arguments.Count == 0)
+            {
+                return false;
+            }
+
+            eventName = YuspecSpecParser.ParseLiteral(action.Arguments[0])?.ToString() ?? string.Empty;
+            if (!eventName.Contains(".") && !string.IsNullOrWhiteSpace(defaultActorType))
+            {
+                eventName = $"{defaultActorType}.{eventName}";
+            }
+
+            return !string.IsNullOrWhiteSpace(eventName);
+        }
+
+        private static Type ResolvePotentialLiteralType(string token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return null;
+            }
+
+            var trimmed = token.Trim();
+            if (trimmed.Contains(".") || Regex.IsMatch(trimmed, "^[A-Za-z_][A-Za-z0-9_]*$"))
+            {
+                return null;
+            }
+
+            var value = YuspecSpecParser.ParseLiteral(trimmed);
+            return ReferenceEquals(value, trimmed) ? null : value?.GetType();
+        }
+
+        private static bool IsTypeCompatible(Type expectedType, Type actualType)
+        {
+            if (expectedType.IsAssignableFrom(actualType))
+            {
+                return true;
+            }
+
+            var normalizedExpected = Nullable.GetUnderlyingType(expectedType) ?? expectedType;
+            if (normalizedExpected == typeof(string))
+            {
+                return true;
+            }
+
+            if (normalizedExpected == typeof(float) && (actualType == typeof(int) || actualType == typeof(float)))
+            {
+                return true;
+            }
+
+            if (normalizedExpected == typeof(string[]) && actualType == typeof(List<string>))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private static object CloneValue(object value)
+        {
+            if (value is List<string> list)
+            {
+                return new List<string>(list);
+            }
+
+            return value;
+        }
+
+        private static bool ValuesEqual(object actual, object expected)
+        {
+            if (actual is IEnumerable<string> actualList && expected is IEnumerable<string> expectedList)
+            {
+                return actualList.SequenceEqual(expectedList, StringComparer.OrdinalIgnoreCase);
+            }
+
+            return string.Equals(FormatValue(actual), FormatValue(expected), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string FormatValue(object value)
+        {
+            if (value is IEnumerable<string> values && !(value is string))
+            {
+                return "[" + string.Join(", ", values) + "]";
+            }
+
+            return value?.ToString() ?? "null";
+        }
+
+        private sealed class StateMachineSession
+        {
+            public YuspecBehaviorDefinition Behavior;
+            public YuspecEntity Entity;
+            public YuspecStateDefinition CurrentState;
+            public float StateElapsed;
+            public float LastTransitionTime;
+            public readonly YuspecStateMachineStatus Status;
+            public readonly Dictionary<YuspecTimedActionBlock, float> EveryTimers = new Dictionary<YuspecTimedActionBlock, float>();
+
+            public StateMachineSession(YuspecBehaviorDefinition behavior, YuspecEntity entity, YuspecStateDefinition initialState)
+            {
+                Behavior = behavior;
+                Entity = entity;
+                CurrentState = initialState;
+                LastTransitionTime = Application.isPlaying ? Time.time : 0f;
+                Status = new YuspecStateMachineStatus
+                {
+                    BehaviorName = behavior.Name,
+                    EntityId = entity.EntityId,
+                    EntityType = entity.EntityType,
+                    CurrentState = initialState.Name,
+                    StateElapsed = 0f,
+                    LastTransitionTime = LastTransitionTime
+                };
+            }
+        }
+
+        private readonly struct EmittedEventEdge
+        {
+            public string EventName { get; }
+            public string SourceName { get; }
+            public int Line { get; }
+
+            public EmittedEventEdge(string eventName, string sourceName, int line)
+            {
+                EventName = eventName;
+                SourceName = sourceName;
+                Line = line;
+            }
         }
     }
 }

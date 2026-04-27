@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Yuspec.Unity
@@ -10,6 +11,7 @@ namespace Yuspec.Unity
         public List<YuspecEventHandler> EventHandlers { get; } = new List<YuspecEventHandler>();
         public List<YuspecBehaviorDefinition> Behaviors { get; } = new List<YuspecBehaviorDefinition>();
         public List<YuspecScenarioDefinition> Scenarios { get; } = new List<YuspecScenarioDefinition>();
+        public List<YuspecDialogueDefinition> Dialogues { get; } = new List<YuspecDialogueDefinition>();
 
         public YuspecCompiledSpec(string sourceName)
         {
@@ -52,14 +54,70 @@ namespace Yuspec.Unity
         }
     }
 
+    public enum YuspecPropertyType
+    {
+        Unknown,
+        Int,
+        Float,
+        Bool,
+        String,
+        StringArray
+    }
+
+    public sealed class YuspecPropertyDeclaration
+    {
+        public string Name { get; }
+        public YuspecPropertyType Type { get; }
+        public object Value { get; set; }
+        public bool HasDefaultValue { get; set; }
+        public string SourceName { get; }
+        public int Line { get; }
+        public int Column { get; }
+
+        public YuspecPropertyDeclaration(
+            string name,
+            YuspecPropertyType type,
+            object value,
+            bool hasDefaultValue,
+            string sourceName,
+            int line,
+            int column)
+        {
+            Name = name;
+            Type = type;
+            Value = value;
+            HasDefaultValue = hasDefaultValue;
+            SourceName = sourceName;
+            Line = line;
+            Column = column;
+        }
+    }
+
     public sealed class YuspecEntityDeclaration
     {
         public string EntityType { get; }
-        public Dictionary<string, object> Properties { get; } = new Dictionary<string, object>();
+        public string SourceName { get; }
+        public int Line { get; }
+        public string ScriptableObjectPath { get; }
+        public Dictionary<string, YuspecPropertyDeclaration> Properties { get; } =
+            new Dictionary<string, YuspecPropertyDeclaration>(StringComparer.OrdinalIgnoreCase);
 
-        public YuspecEntityDeclaration(string entityType)
+        public YuspecEntityDeclaration(string entityType, string sourceName, int line, string scriptableObjectPath = "")
         {
             EntityType = entityType;
+            SourceName = sourceName;
+            Line = line;
+            ScriptableObjectPath = scriptableObjectPath ?? string.Empty;
+        }
+
+        public YuspecPropertyType GetPropertyType(string propertyName)
+        {
+            return Properties.TryGetValue(propertyName, out var property) ? property.Type : YuspecPropertyType.Unknown;
+        }
+
+        public object GetPropertyValue(string propertyName)
+        {
+            return Properties.TryGetValue(propertyName, out var property) ? property.Value : null;
         }
     }
 
@@ -131,7 +189,7 @@ namespace Yuspec.Unity
         public string AssignedValue { get; }
         public int Line { get; }
 
-        public bool IsSetAction => string.Equals(Name, "set", System.StringComparison.OrdinalIgnoreCase);
+        public bool IsSetAction => string.Equals(Name, "set", StringComparison.OrdinalIgnoreCase);
 
         public YuspecActionCall(string name, int line)
         {
@@ -152,13 +210,15 @@ namespace Yuspec.Unity
     {
         public string Name { get; }
         public string EntityType { get; }
+        public string SourceName { get; }
         public int Line { get; }
         public List<YuspecStateDefinition> States { get; } = new List<YuspecStateDefinition>();
 
-        public YuspecBehaviorDefinition(string name, string entityType, int line)
+        public YuspecBehaviorDefinition(string name, string entityType, string sourceName, int line)
         {
             Name = name;
             EntityType = entityType;
+            SourceName = sourceName;
             Line = line;
         }
     }
@@ -166,6 +226,7 @@ namespace Yuspec.Unity
     public sealed class YuspecStateDefinition
     {
         public string Name { get; }
+        public string SourceName { get; }
         public int Line { get; }
         public List<YuspecActionCall> EnterActions { get; } = new List<YuspecActionCall>();
         public List<YuspecActionCall> ExitActions { get; } = new List<YuspecActionCall>();
@@ -173,9 +234,10 @@ namespace Yuspec.Unity
         public List<YuspecTimedActionBlock> EveryBlocks { get; } = new List<YuspecTimedActionBlock>();
         public List<YuspecTransitionDefinition> Transitions { get; } = new List<YuspecTransitionDefinition>();
 
-        public YuspecStateDefinition(string name, int line)
+        public YuspecStateDefinition(string name, string sourceName, int line)
         {
             Name = name;
+            SourceName = sourceName;
             Line = line;
         }
     }
@@ -183,12 +245,14 @@ namespace Yuspec.Unity
     public sealed class YuspecTimedActionBlock
     {
         public string IntervalText { get; }
+        public string SourceName { get; }
         public int Line { get; }
         public List<YuspecActionCall> Actions { get; } = new List<YuspecActionCall>();
 
-        public YuspecTimedActionBlock(string intervalText, int line)
+        public YuspecTimedActionBlock(string intervalText, string sourceName, int line)
         {
             IntervalText = intervalText;
+            SourceName = sourceName;
             Line = line;
         }
     }
@@ -197,12 +261,14 @@ namespace Yuspec.Unity
     {
         public string TriggerText { get; }
         public string TargetState { get; }
+        public string SourceName { get; }
         public int Line { get; }
 
-        public YuspecTransitionDefinition(string triggerText, string targetState, int line)
+        public YuspecTransitionDefinition(string triggerText, string targetState, string sourceName, int line)
         {
             TriggerText = triggerText;
             TargetState = targetState;
+            SourceName = sourceName;
             Line = line;
         }
     }
@@ -230,6 +296,45 @@ namespace Yuspec.Unity
         public YuspecScenarioStepDefinition(string text, int line)
         {
             Text = text;
+            Line = line;
+        }
+    }
+
+    public enum YuspecDialogueEntryKind
+    {
+        Line,
+        Choice
+    }
+
+    public sealed class YuspecDialogueEntry
+    {
+        public YuspecDialogueEntryKind Kind { get; }
+        public string Text { get; }
+        public string Target { get; }
+        public int Line { get; }
+
+        public YuspecDialogueEntry(YuspecDialogueEntryKind kind, string text, string target, int line)
+        {
+            Kind = kind;
+            Text = text;
+            Target = target ?? string.Empty;
+            Line = line;
+        }
+    }
+
+    public sealed class YuspecDialogueDefinition
+    {
+        public string Name { get; }
+        public string EntityType { get; }
+        public string SourceName { get; }
+        public int Line { get; }
+        public List<YuspecDialogueEntry> Entries { get; } = new List<YuspecDialogueEntry>();
+
+        public YuspecDialogueDefinition(string name, string entityType, string sourceName, int line)
+        {
+            Name = name;
+            EntityType = entityType;
+            SourceName = sourceName;
             Line = line;
         }
     }

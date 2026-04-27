@@ -1,8 +1,13 @@
 using System;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace Yuspec.Unity.Tests
 {
@@ -55,6 +60,7 @@ behavior GoblinAI for Goblin {
 }
 ";
 
+            LogAssert.Expect(LogType.Error, new Regex(@".*\(\d+,1\): error YUSPEC: Unknown transition target 'MissingState'.*"));
             var runtime = CreateRuntime(source);
             Assert.That(runtime.Diagnostics.Any(d => d.code == "YSP0115"), Is.True);
             DestroyRuntime(runtime);
@@ -157,6 +163,7 @@ entity Door {
             var door = CreateEntity("Door01", "Door");
             runtime.RegisterEntity(door);
             Assert.That(door.CurrentState, Is.EqualTo("Closed"));
+            door.CurrentState = "Locked";
 
             specAsset.SetSource("HotReloadSpec", @"
 entity Door {
@@ -164,10 +171,11 @@ entity Door {
 }
 ");
 
+            LogAssert.Expect(LogType.Log, new Regex(@"\[YUSPEC\] Hot reloaded: HotReloadSpec . 0 handlers updated"));
             var reloaded = runtime.ReloadSpecsIfChanged();
 
             Assert.That(reloaded, Is.True);
-            Assert.That(door.CurrentState, Is.EqualTo("Open"));
+            Assert.That(door.CurrentState, Is.EqualTo("Locked"));
             Assert.That(runtime.Diagnostics.Any(d => d.code == "YSP0600"), Is.True);
 
             DestroyEntity(door);
@@ -208,6 +216,145 @@ on Player.EnterBossRoom with BossRoom:
             DestroyRuntime(runtime);
         }
 
+        [Test]
+        public void TypedProperties_ActionBindingReceivesTypedArguments_AndScenarioPasses()
+        {
+            const string source = @"
+entity Player {
+}
+
+entity Goblin {
+    health: int = 30
+}
+
+on Player.Hit with Goblin:
+    damage Goblin by 5
+
+scenario ""typed damage lowers health"" {
+    when Player.Hit Goblin
+    expect Goblin.health == 25
+}
+";
+
+            var runtime = CreateRuntime(source);
+            var player = CreateEntity("Player01", "Player");
+            var goblin = CreateEntity("Goblin01", "Goblin");
+            runtime.RegisterEntity(player);
+            runtime.RegisterEntity(goblin);
+
+            LogAssert.Expect(LogType.Log, new Regex(@"YUSPEC damage 'Goblin01' by 5\."));
+            var results = runtime.RunScenarios();
+
+            Assert.That(results.Count, Is.EqualTo(1));
+            Assert.That(results[0].Passed, Is.True, results[0].Message);
+            Assert.That(goblin.TryGetProperty("health", out var health), Is.True);
+            Assert.That(health, Is.EqualTo(25));
+
+            DestroyEntity(player);
+            DestroyEntity(goblin);
+            DestroyRuntime(runtime);
+        }
+
+        [Test]
+        public void StaticAnalysis_ReportsEventHandlerCycle()
+        {
+            const string source = @"
+entity Player {
+}
+
+on Player.Start:
+    emit Player.Start
+";
+
+            LogAssert.Expect(LogType.Error, new Regex(@".*\(\d+,1\): error YUSPEC: Event handler cycle detected: Player\.Start -> Player\.Start.*"));
+            var runtime = CreateRuntime(source);
+
+            Assert.That(runtime.Diagnostics.Any(d => d.code == "YSP0401"), Is.True);
+
+            DestroyRuntime(runtime);
+        }
+
+        [Test]
+        public void DialogueRuntime_StartDialogueBuiltinRaisesLineChoiceAndEnd()
+        {
+            const string source = @"
+entity Player {
+}
+
+entity Merchant {
+}
+
+dialogue ""MerchantGreeting"" for Merchant {
+    line ""Welcome, traveler.""
+    choice ""Goodbye."" -> end
+}
+
+on Player.TalkTo with Merchant:
+    start_dialogue ""MerchantGreeting""
+";
+
+            var runtime = CreateRuntime(source);
+            var player = CreateEntity("Player01", "Player");
+            var merchant = CreateEntity("Merchant01", "Merchant");
+            var lines = 0;
+            var choices = 0;
+            var ended = false;
+            runtime.DialogueRuntime.OnLine += (_, __, ___) => lines++;
+            runtime.DialogueRuntime.OnChoice += (_, __, ___, ____) => choices++;
+            runtime.DialogueRuntime.OnEnd += (_, __) => ended = true;
+
+            runtime.RegisterEntity(player);
+            runtime.RegisterEntity(merchant);
+            runtime.Emit("Player.TalkTo", player, merchant);
+
+            Assert.That(lines, Is.EqualTo(1));
+            Assert.That(choices, Is.EqualTo(1));
+            Assert.That(ended, Is.True);
+
+            DestroyEntity(player);
+            DestroyEntity(merchant);
+            DestroyRuntime(runtime);
+        }
+
+#if UNITY_EDITOR
+        [Test]
+        public void ScriptableObjectBinding_ReadsValuesAndWritesBackWhenMutable()
+        {
+            const string assetPath = "Assets/YuspecPlayerConfigTest.asset";
+            AssetDatabase.DeleteAsset(assetPath);
+            var config = ScriptableObject.CreateInstance<PlayerConfig>();
+            config.health = 42;
+            config.moveSpeed = 7.5f;
+            AssetDatabase.CreateAsset(config, assetPath);
+            AssetDatabase.SaveAssets();
+
+            const string source = @"
+entity PlayerConfig from ""Assets/YuspecPlayerConfigTest.asset"" {
+    health: int
+    moveSpeed: float
+}
+
+on PlayerConfig.Buff:
+    set PlayerConfig.health = 50
+";
+
+            var runtime = CreateRuntime(source);
+            var entity = CreateEntity("PlayerConfig01", "PlayerConfig");
+            runtime.RegisterEntity(entity);
+
+            Assert.That(entity.TryGetProperty("health", out var health), Is.True);
+            Assert.That(health, Is.EqualTo(42));
+
+            runtime.Emit("PlayerConfig.Buff", entity, null);
+
+            Assert.That(config.health, Is.EqualTo(50));
+
+            DestroyEntity(entity);
+            DestroyRuntime(runtime);
+            AssetDatabase.DeleteAsset(assetPath);
+        }
+#endif
+
         private static YuspecRuntime CreateRuntime(string source)
         {
             return CreateRuntime(new TextAsset(source));
@@ -247,6 +394,13 @@ on Player.EnterBossRoom with BossRoom:
             {
                 UnityEngine.Object.DestroyImmediate(runtime.gameObject);
             }
+        }
+
+        [YuspecMutable]
+        private sealed class PlayerConfig : ScriptableObject
+        {
+            public int health;
+            public float moveSpeed;
         }
     }
 }

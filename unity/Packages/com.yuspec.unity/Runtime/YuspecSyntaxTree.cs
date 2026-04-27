@@ -23,6 +23,7 @@ namespace Yuspec.Unity
         public List<YuspecEventRuleSyntax> EventRules { get; } = new List<YuspecEventRuleSyntax>();
         public List<YuspecBehaviorSyntax> Behaviors { get; } = new List<YuspecBehaviorSyntax>();
         public List<YuspecScenarioSyntax> Scenarios { get; } = new List<YuspecScenarioSyntax>();
+        public List<YuspecDialogueSyntax> Dialogues { get; } = new List<YuspecDialogueSyntax>();
 
         public YuspecSyntaxTree(string sourceName)
         {
@@ -33,12 +34,14 @@ namespace Yuspec.Unity
     public sealed class YuspecEntitySyntax
     {
         public string EntityType { get; }
+        public string SourceAssetPath { get; }
         public YuspecSourceLocation Location { get; }
         public List<YuspecPropertySyntax> Properties { get; } = new List<YuspecPropertySyntax>();
 
-        public YuspecEntitySyntax(string entityType, YuspecSourceLocation location)
+        public YuspecEntitySyntax(string entityType, string sourceAssetPath, YuspecSourceLocation location)
         {
             EntityType = entityType;
+            SourceAssetPath = sourceAssetPath ?? string.Empty;
             Location = location;
         }
     }
@@ -47,12 +50,16 @@ namespace Yuspec.Unity
     {
         public string Name { get; }
         public object Value { get; }
+        public bool HasValue { get; }
+        public YuspecPropertyType Type { get; }
         public YuspecSourceLocation Location { get; }
 
-        public YuspecPropertySyntax(string name, object value, YuspecSourceLocation location)
+        public YuspecPropertySyntax(string name, object value, bool hasValue, YuspecPropertyType type, YuspecSourceLocation location)
         {
             Name = name;
             Value = value;
+            HasValue = hasValue;
+            Type = type;
             Location = location;
         }
     }
@@ -66,12 +73,7 @@ namespace Yuspec.Unity
         public YuspecSourceLocation Location { get; }
         public List<YuspecActionSyntax> Actions { get; } = new List<YuspecActionSyntax>();
 
-        public YuspecEventRuleSyntax(
-            string actorType,
-            string eventName,
-            string targetType,
-            string conditionText,
-            YuspecSourceLocation location)
+        public YuspecEventRuleSyntax(string actorType, string eventName, string targetType, string conditionText, YuspecSourceLocation location)
         {
             ActorType = actorType;
             EventName = eventName;
@@ -179,6 +181,37 @@ namespace Yuspec.Unity
         public YuspecScenarioStepSyntax(string text, YuspecSourceLocation location)
         {
             Text = text;
+            Location = location;
+        }
+    }
+
+    public sealed class YuspecDialogueSyntax
+    {
+        public string Name { get; }
+        public string EntityType { get; }
+        public YuspecSourceLocation Location { get; }
+        public List<YuspecDialogueEntrySyntax> Entries { get; } = new List<YuspecDialogueEntrySyntax>();
+
+        public YuspecDialogueSyntax(string name, string entityType, YuspecSourceLocation location)
+        {
+            Name = name;
+            EntityType = entityType;
+            Location = location;
+        }
+    }
+
+    public sealed class YuspecDialogueEntrySyntax
+    {
+        public YuspecDialogueEntryKind Kind { get; }
+        public string Text { get; }
+        public string Target { get; }
+        public YuspecSourceLocation Location { get; }
+
+        public YuspecDialogueEntrySyntax(YuspecDialogueEntryKind kind, string text, string target, YuspecSourceLocation location)
+        {
+            Kind = kind;
+            Text = text;
+            Target = target ?? string.Empty;
             Location = location;
         }
     }
